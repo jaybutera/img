@@ -1,6 +1,4 @@
-use async_fs::File;
 use tide::Request;
-use tide::prelude::*;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -24,7 +22,6 @@ async fn upload_image(mut req: Request<()>) -> tide::Result {
 
     // Write image to disk
     smol::fs::write("test.jpeg", image).await?;
-    println!("Wrote image to file");
 
     Ok("Heyo".into())
 }
