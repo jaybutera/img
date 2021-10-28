@@ -21,7 +21,8 @@ async fn upload_image(mut req: Request<()>) -> tide::Result {
     let image = req.body_bytes().await?;
 
     // Write image to disk
-    smol::fs::write("test.jpeg", image).await?;
+    let fname = format!("{}.jpeg", blake3::hash(&image));
+    smol::fs::write(fname, image).await?;
 
     Ok("Heyo".into())
 }
