@@ -1,4 +1,6 @@
-use tide::Request;
+use http_types::mime;
+use smol::prelude::*;
+use tide::{Request, Response};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -8,6 +10,7 @@ async fn main_async() -> tide::Result<()> {
     let mut app = tide::new();
 
     app.at("/:topic/new").post(upload_image);
+    app.at("/:topic").get(get_topic_images);
     app.listen("0.0.0.0:8080").await?;
 
     Ok(())
@@ -21,8 +24,26 @@ async fn upload_image(mut req: Request<()>) -> tide::Result {
     let image = req.body_bytes().await?;
 
     // Write image to disk
-    let fname = format!("{}.jpeg", blake3::hash(&image));
+    let topic = req.param("topic")?;
+    let fname = format!("./{}/{}.jpeg", topic, blake3::hash(&image));
+    println!("Wrote image {}", fname);
+
     smol::fs::write(fname, image).await?;
 
-    Ok("Heyo".into())
+    Ok("Success".into())
+}
+
+async fn get_topic_images(mut req: Request<()>) -> tide::Result {
+    let topic = req.param("topic")?;
+    let mut image_names = smol::fs::read_dir(topic).await?;
+
+    let name = image_names.next().await.unwrap()?;
+    let image = smol::fs::read(name.path()).await?;
+
+    let res = Response::builder(200)
+        .body(image)
+        .content_type(mime::JPEG)
+        .build();
+
+    Ok(res)
 }
