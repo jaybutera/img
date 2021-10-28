@@ -1,3 +1,6 @@
+mod types;
+
+use askama::Template;
 use http_types::mime;
 use smol::prelude::*;
 use tide::{Request, Response};
@@ -9,11 +12,30 @@ fn main() -> tide::Result<()> {
 async fn main_async() -> tide::Result<()> {
     let mut app = tide::new();
 
-    app.at("/:topic/new").post(upload_image);
+    app.at("/:topic/new").get(upload_image_page);
+    app.at("/:topic/new-image").post(upload_image);
     app.at("/:topic").get(get_topic_images);
     app.listen("0.0.0.0:8080").await?;
 
     Ok(())
+}
+
+async fn upload_image_page(mut req: Request<()>) -> tide::Result {
+    let page = types::UploadTemplate {};
+
+    let res = Response::builder(200)
+        /*
+        .body("<html><body><form action=\"\">
+                  <input type=\"file\" id=\"myFile\" name=\"filename\">
+                  <input type=\"submit\">
+                </form></body></html>")
+        */
+        .body(page.render().unwrap())
+        .content_type(mime::HTML)
+        .build();
+
+
+    Ok(res)
 }
 
 async fn upload_image(mut req: Request<()>) -> tide::Result {

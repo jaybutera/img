@@ -1,0 +1,13 @@
+<input type="file" multiple id="input-images">
+
+<script>
+    const fileInput = document.getElementById('input-images');
+    fileInput.onchange = () => {
+      const selectedFiles = [...fileInput.files];
+      console.log(selectedFiles);
+      fetch('http://0.0.0.0:8080/test/new-image', {
+        method: 'POST',
+        body: selectedFiles[0],
+      });
+    }
+</script>
