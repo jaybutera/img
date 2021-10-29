@@ -7,7 +7,9 @@ pub struct UploadTemplate {}
 
 #[derive(Template)]
 #[template(path = "topic.html")]
-pub struct TopicTemplate {}
+pub struct TopicTemplate {
+    pub image_names: Vec<String>,
+}
 
-#[derive(Serialize)]
-pub struct ImageList(pub Vec<String>);
+//#[derive(Serialize)]
+//pub struct ImageList(pub Vec<String>);

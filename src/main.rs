@@ -16,8 +16,8 @@ async fn main_async() -> tide::Result<()> {
     app.at("/:topic/new-image").post(upload_image);
     app.at("/:topic/raw").get(get_topic_images);
     app.at("/:topic").get(images_page);
-    app.at("list-images/:topic").get(image_list);
-    app.at("get-image/:topic/:name").get(get_image);
+    app.at("list-images/:topic").get(get_image_list);
+    app.at(":topic/:name").get(get_image);
     app.listen("0.0.0.0:8080").await?;
 
     Ok(())
@@ -37,20 +37,26 @@ async fn get_image(mut req: Request<()>) -> tide::Result {
     Ok(res)
 }
 
-async fn image_list(mut req: Request<()>) -> tide::Result<Body> {
+async fn get_image_list(mut req: Request<()>) -> tide::Result<Body> {
     let topic = req.param("topic")?;
+    let image_list = image_list(topic.into()).await?;
+    Ok(Body::from_json(&image_list)?)
+}
+
+async fn image_list(topic: String) -> tide::Result<Vec<String>> {
     let image_name_stream = smol::fs::read_dir(topic).await?;
     let image_names: Vec<String> = image_name_stream
         .map(|entry| entry.unwrap().file_name())
         .map(|ostr| ostr.into_string().unwrap())
         .collect().await;
 
-    //Ok(Body::from_json(&types::ImageList(image_names))?)
-    Ok(Body::from_json(&image_names)?)
+    Ok(image_names)
 }
 
 async fn images_page(mut req: Request<()>) -> tide::Result {
-    let page = types::TopicTemplate {};
+    let topic = req.param("topic")?;
+    let image_names = image_list(topic.into()).await?;
+    let page = types::TopicTemplate { image_names };
 
     let res = Response::builder(200)
         .body(page.render().unwrap())

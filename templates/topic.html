@@ -1,6 +1,9 @@
+{% for name in image_names %}
+<img src="http://0.0.0.0:8080/test/{{ name }}" height="300" width="300"/>
+{% endfor %}
 
 <script>
-    fetch('/test')
+    fetch('/list-images/test')
     .then( res => {
         console.log(res)
     });
