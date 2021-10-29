@@ -17,14 +17,29 @@ async fn main_async() -> tide::Result<()> {
     app.at("/:topic/raw").get(get_topic_images);
     app.at("/:topic").get(images_page);
     app.at("list-images/:topic").get(image_list);
+    app.at("get-image/:topic/:name").get(get_image);
     app.listen("0.0.0.0:8080").await?;
 
     Ok(())
 }
 
+async fn get_image(mut req: Request<()>) -> tide::Result {
+    let topic = req.param("topic")?;
+    let name = req.param("name")?;
+    let path = format!("{}/{}", topic, name);
+    let image = smol::fs::read(path).await?;
+
+    let res = Response::builder(200)
+        .body(image)
+        .content_type(mime::JPEG)
+        .build();
+
+    Ok(res)
+}
+
 async fn image_list(mut req: Request<()>) -> tide::Result<Body> {
     let topic = req.param("topic")?;
-    let mut image_name_stream = smol::fs::read_dir(topic).await?;
+    let image_name_stream = smol::fs::read_dir(topic).await?;
     let image_names: Vec<String> = image_name_stream
         .map(|entry| entry.unwrap().file_name())
         .map(|ostr| ostr.into_string().unwrap())
