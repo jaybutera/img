@@ -11,3 +11,4 @@ smol = "1.2.5"
 blake3 = "1.1.0"
 askama = "0.10.5"
 http-types = "2.10.0"
+serde={ version = "1.0.130", features = ["derive"] }

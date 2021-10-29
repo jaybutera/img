@@ -3,7 +3,7 @@ mod types;
 use askama::Template;
 use http_types::mime;
 use smol::prelude::*;
-use tide::{Request, Response};
+use tide::{Body, Request, Response};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -14,22 +14,42 @@ async fn main_async() -> tide::Result<()> {
 
     app.at("/:topic/new").get(upload_image_page);
     app.at("/:topic/new-image").post(upload_image);
-    app.at("/:topic").get(get_topic_images);
+    app.at("/:topic/raw").get(get_topic_images);
+    app.at("/:topic").get(images_page);
+    app.at("list-images/:topic").get(image_list);
     app.listen("0.0.0.0:8080").await?;
 
     Ok(())
+}
+
+async fn image_list(mut req: Request<()>) -> tide::Result<Body> {
+    let topic = req.param("topic")?;
+    let mut image_name_stream = smol::fs::read_dir(topic).await?;
+    let image_names: Vec<String> = image_name_stream
+        .map(|entry| entry.unwrap().file_name())
+        .map(|ostr| ostr.into_string().unwrap())
+        .collect().await;
+
+    //Ok(Body::from_json(&types::ImageList(image_names))?)
+    Ok(Body::from_json(&image_names)?)
+}
+
+async fn images_page(mut req: Request<()>) -> tide::Result {
+    let page = types::TopicTemplate {};
+
+    let res = Response::builder(200)
+        .body(page.render().unwrap())
+        .content_type(mime::HTML)
+        .build();
+
+
+    Ok(res)
 }
 
 async fn upload_image_page(mut req: Request<()>) -> tide::Result {
     let page = types::UploadTemplate {};
 
     let res = Response::builder(200)
-        /*
-        .body("<html><body><form action=\"\">
-                  <input type=\"file\" id=\"myFile\" name=\"filename\">
-                  <input type=\"submit\">
-                </form></body></html>")
-        */
         .body(page.render().unwrap())
         .content_type(mime::HTML)
         .build();
