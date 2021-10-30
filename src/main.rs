@@ -14,7 +14,7 @@ async fn main_async() -> tide::Result<()> {
 
     app.at("/:topic/new").get(upload_image_page);
     app.at("/:topic/new-image").post(upload_image);
-    app.at("/:topic/raw").get(get_topic_images);
+    //app.at("/:topic/raw").get(get_topic_images);
     app.at("/:topic").get(images_page);
     app.at("list-images/:topic").get(get_image_list);
     app.at(":topic/:name").get(get_image);
@@ -109,6 +109,7 @@ async fn create_topic(topic: &str) -> impl Future {
     smol::fs::create_dir(format!("./{}", topic))
 }
 
+/*
 async fn get_topic_images(mut req: Request<()>) -> tide::Result {
     let topic = req.param("topic")?;
     let mut image_names = smol::fs::read_dir(topic).await?;
@@ -123,3 +124,4 @@ async fn get_topic_images(mut req: Request<()>) -> tide::Result {
 
     Ok(res)
 }
+*/
