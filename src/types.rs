@@ -1,5 +1,5 @@
 use askama::Template;
-use serde::Serialize;
+use serde::Deserialize;
 
 #[derive(Template)]
 #[template(path = "upload.html")]

@@ -3,7 +3,7 @@ mod types;
 use askama::Template;
 use http_types::mime;
 use smol::prelude::*;
-use tide::{Body, Request, Response};
+use tide::{log, Body, Request, Response};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -11,6 +11,7 @@ fn main() -> tide::Result<()> {
 
 async fn main_async() -> tide::Result<()> {
     let mut app = tide::new();
+    log::start();
 
     app.at("/:topic/new").get(upload_image_page);
     app.at("/:topic/new-image").post(upload_image);
@@ -97,16 +98,14 @@ async fn upload_image(mut req: Request<()>) -> tide::Result {
     smol::fs::create_dir(format!("./{}", topic)).await;
 
     // Write image to disk
+    //for image in images.images {
     let fname = format!("./{}/{}.jpeg", topic, blake3::hash(&image));
     println!("Wrote image {}", fname);
 
     smol::fs::write(fname, image).await?;
+    //}
 
     Ok("Success".into())
-}
-
-async fn create_topic(topic: &str) -> impl Future {
-    smol::fs::create_dir(format!("./{}", topic))
 }
 
 /*
