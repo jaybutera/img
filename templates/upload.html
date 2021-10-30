@@ -5,10 +5,11 @@
     fileInput.onchange = () => {
       const selectedFiles = [...fileInput.files];
       console.log(selectedFiles);
-      for (let f in selectedFiles) {
+      //for (let f in selectedFiles) {
+      for (let i = 0; i < selectedFiles.length; i++) {
           fetch('/{{ topic }}/new-image', {
             method: 'POST',
-            body: f,
+            body: selectedFiles[i],
           });
       }
     }
