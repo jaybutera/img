@@ -1,8 +1,11 @@
 mod types;
 
+use types::Args;
 use askama::Template;
 use http_types::mime;
 use smol::prelude::*;
+use std::path::PathBuf;
+use structopt::StructOpt;
 use tide::{log, Body, Request, Response};
 
 fn main() -> tide::Result<()> {
@@ -10,7 +13,8 @@ fn main() -> tide::Result<()> {
 }
 
 async fn main_async() -> tide::Result<()> {
-    let mut app = tide::new();
+    let args = types::Args::from_args();
+    let mut app = tide::with_state(args);
     log::start();
 
     app.at("/:topic/new").get(upload_image_page);
@@ -24,10 +28,13 @@ async fn main_async() -> tide::Result<()> {
     Ok(())
 }
 
-async fn get_image(mut req: Request<()>) -> tide::Result {
+async fn get_image(req: Request<Args>) -> tide::Result {
     let topic = req.param("topic")?;
     let name = req.param("name")?;
-    let path = format!("{}/{}", topic, name);
+    let mut path = req.state().root_dir.clone();
+    path.push(topic);
+    path.push(name);
+
     let image = smol::fs::read(path).await?;
 
     let res = Response::builder(200)
@@ -38,14 +45,17 @@ async fn get_image(mut req: Request<()>) -> tide::Result {
     Ok(res)
 }
 
-async fn get_image_list(mut req: Request<()>) -> tide::Result<Body> {
+async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {
     let topic = req.param("topic")?;
-    let image_list = image_list(topic.into()).await?;
+    let mut path = req.state().root_dir.clone();
+    path.push(topic);
+
+    let image_list = image_list(path).await?;
     Ok(Body::from_json(&image_list)?)
 }
 
-async fn image_list(topic: String) -> tide::Result<Vec<String>> {
-    let image_name_stream = smol::fs::read_dir(topic).await?;
+async fn image_list(path: PathBuf) -> tide::Result<Vec<String>> {
+    let image_name_stream = smol::fs::read_dir(path).await?;
     let image_names: Vec<String> = image_name_stream
         .map(|entry| entry.unwrap().file_name())
         .map(|ostr| ostr.into_string().unwrap())
@@ -54,9 +64,12 @@ async fn image_list(topic: String) -> tide::Result<Vec<String>> {
     Ok(image_names)
 }
 
-async fn images_page(req: Request<()>) -> tide::Result {
+async fn images_page(req: Request<Args>) -> tide::Result {
     let topic = req.param("topic")?;
-    let image_names = image_list(topic.into()).await?;
+    let mut path = req.state().root_dir.clone();
+    path.push(topic);
+
+    let image_names = image_list(path).await?;
     let page = types::TopicTemplate {
         image_names,
         topic: topic.into()
@@ -71,7 +84,7 @@ async fn images_page(req: Request<()>) -> tide::Result {
     Ok(res)
 }
 
-async fn upload_image_page(req: Request<()>) -> tide::Result {
+async fn upload_image_page(req: Request<Args>) -> tide::Result {
     let topic = req.param("topic")?;
     let page = types::UploadTemplate {
         topic: topic.into()
@@ -85,25 +98,25 @@ async fn upload_image_page(req: Request<()>) -> tide::Result {
     Ok(res)
 }
 
-async fn upload_image(mut req: Request<()>) -> tide::Result {
+async fn upload_image(mut req: Request<Args>) -> tide::Result {
     // Check that content type is an image
     //if Some(ContentType::new("image/*")) == req.content_type().base {
     //} else {
     //}
     let image = req.body_bytes().await?;
     let topic = req.param("topic")?;
+    let mut fname = req.state().root_dir.clone();//.to_str().unwrap();
+    fname.push(topic);
 
     // Create topic if not already created
     // TODO Ignore result for now, failed likely means dir exists
-    smol::fs::create_dir(format!("./{}", topic)).await;
+    smol::fs::create_dir(fname.clone()).await;
 
     // Write image to disk
-    //for image in images.images {
-    let fname = format!("./{}/{}.jpeg", topic, blake3::hash(&image));
-    println!("Wrote image {}", fname);
+    fname.push(format!("{}.jpeg", blake3::hash(&image)));
+    log::debug!("Wrote image {:?}", fname);
 
     smol::fs::write(fname, image).await?;
-    //}
 
     Ok("Success".into())
 }
