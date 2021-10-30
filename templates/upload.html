@@ -5,7 +5,7 @@
     fileInput.onchange = () => {
       const selectedFiles = [...fileInput.files];
       console.log(selectedFiles);
-      fetch('http://0.0.0.0:8080/test/new-image', {
+      fetch('http://0.0.0.0:8080/{{ topic }}/new-image', {
         method: 'POST',
         body: selectedFiles[0],
       });

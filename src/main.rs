@@ -53,10 +53,13 @@ async fn image_list(topic: String) -> tide::Result<Vec<String>> {
     Ok(image_names)
 }
 
-async fn images_page(mut req: Request<()>) -> tide::Result {
+async fn images_page(req: Request<()>) -> tide::Result {
     let topic = req.param("topic")?;
     let image_names = image_list(topic.into()).await?;
-    let page = types::TopicTemplate { image_names };
+    let page = types::TopicTemplate {
+        image_names,
+        topic: topic.into()
+    };
 
     let res = Response::builder(200)
         .body(page.render().unwrap())
@@ -67,14 +70,16 @@ async fn images_page(mut req: Request<()>) -> tide::Result {
     Ok(res)
 }
 
-async fn upload_image_page(mut req: Request<()>) -> tide::Result {
-    let page = types::UploadTemplate {};
+async fn upload_image_page(req: Request<()>) -> tide::Result {
+    let topic = req.param("topic")?;
+    let page = types::UploadTemplate {
+        topic: topic.into()
+    };
 
     let res = Response::builder(200)
         .body(page.render().unwrap())
         .content_type(mime::HTML)
         .build();
-
 
     Ok(res)
 }
@@ -85,15 +90,23 @@ async fn upload_image(mut req: Request<()>) -> tide::Result {
     //} else {
     //}
     let image = req.body_bytes().await?;
+    let topic = req.param("topic")?;
+
+    // Create topic if not already created
+    // TODO Ignore result for now, failed likely means dir exists
+    smol::fs::create_dir(format!("./{}", topic)).await;
 
     // Write image to disk
-    let topic = req.param("topic")?;
     let fname = format!("./{}/{}.jpeg", topic, blake3::hash(&image));
     println!("Wrote image {}", fname);
 
     smol::fs::write(fname, image).await?;
 
     Ok("Success".into())
+}
+
+async fn create_topic(topic: &str) -> impl Future {
+    smol::fs::create_dir(format!("./{}", topic))
 }
 
 async fn get_topic_images(mut req: Request<()>) -> tide::Result {
