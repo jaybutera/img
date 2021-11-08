@@ -1,6 +1,6 @@
 # Sangha
 
-#### A way to share a collection photos and videos by name.
+#### A way to share a collection of photos and videos by name.
 
 ## What is it?
 Sangha is essentially an open wiki for media. Anybody can create a topic by adding photos to it. The topic is an easily accessible url by anyone that knows it exists. Multiple people can upload to a single topic. It's an easy way to share photos with friends around an event, like a trip you took together, or an idea like cool art you find.
