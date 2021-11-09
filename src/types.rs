@@ -24,4 +24,6 @@ pub struct NewTopicTemplate {}
 pub struct Args {
     #[structopt(short, long, default_value = ".")]
     pub root_dir: PathBuf,
+    #[structopt(short, long, default_value = "2342")]
+    pub port: u32,
 }

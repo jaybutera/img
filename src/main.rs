@@ -14,6 +14,7 @@ fn main() -> tide::Result<()> {
 
 async fn main_async() -> tide::Result<()> {
     let args = types::Args::from_args();
+    let port = args.port;
     let mut app = tide::with_state(args);
     log::start();
 
@@ -24,7 +25,7 @@ async fn main_async() -> tide::Result<()> {
     app.at("/:topic").get(images_page);
     app.at("list-images/:topic").get(get_image_list);
     app.at(":topic/:name").get(get_image);
-    app.listen("0.0.0.0:8080").await?;
+    app.listen(format!("0.0.0.0:{}", port)).await?;
 
     Ok(())
 }
