@@ -15,6 +15,10 @@ pub struct TopicTemplate {
     pub topic: String,
 }
 
+#[derive(Template)]
+#[template(path = "new.html")]
+pub struct NewTopicTemplate {}
+
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "sangha")]
 pub struct Args {

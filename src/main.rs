@@ -17,6 +17,7 @@ async fn main_async() -> tide::Result<()> {
     let mut app = tide::with_state(args);
     log::start();
 
+    app.at("/new").get(new_page);
     app.at("/:topic/new").get(upload_image_page);
     app.at("/:topic/new-image").post(upload_image);
     //app.at("/:topic/raw").get(get_topic_images);
@@ -26,6 +27,17 @@ async fn main_async() -> tide::Result<()> {
     app.listen("0.0.0.0:8080").await?;
 
     Ok(())
+}
+
+async fn new_page(req: Request<Args>) -> tide::Result {
+    let page = types::NewTopicTemplate {};
+
+    let res = Response::builder(200)
+        .body(page.render().unwrap())
+        .content_type(mime::HTML)
+        .build();
+
+    Ok(res)
 }
 
 async fn get_image(req: Request<Args>) -> tide::Result {
@@ -79,7 +91,6 @@ async fn images_page(req: Request<Args>) -> tide::Result {
         .body(page.render().unwrap())
         .content_type(mime::HTML)
         .build();
-
 
     Ok(res)
 }

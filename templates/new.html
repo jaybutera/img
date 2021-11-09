@@ -1,0 +1,33 @@
+{% extends "nav.html" %}
+
+{% block body %}
+
+<input type="text" id="new-topic">
+<input type="file" multiple id="input-images">
+<button id="submit-topic">Submit</button>
+
+<script>
+    const topic_elem = document.getElementById("new-topic");
+    const submit = document.getElementById("submit-topic");
+    const fileInput = document.getElementById('input-images');
+
+    submit.onclick = () => {
+      const topic = topic_elem.value;
+      const selectedFiles = [...fileInput.files];
+      for (let i = 0; i < selectedFiles.length; i++) {
+          fetch('/' + topic + '/new-image', {
+            method: 'POST',
+            body: selectedFiles[i],
+          })
+          .then( (res) => {
+              window.location.href = `/${topic}`;
+          })
+          .catch(function(err) {
+            alert(`Error: ${err}` )
+          });
+      }
+    }
+</script>
+
+
+{% endblock %}
