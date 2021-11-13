@@ -3,8 +3,9 @@ mod types;
 use anyhow::anyhow;
 use types::Args;
 use std::fmt::Debug;
+use std::str::FromStr;
 use askama::Template;
-use http_types::mime;
+use http_types::mime::{self, Mime};
 use smol::prelude::*;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -50,11 +51,16 @@ async fn get_image(req: Request<Args>) -> tide::Result {
     path.push(topic);
     path.push(name);
 
+    let ext = path.extension()
+        .expect(&format!("Expected path {:?} to be a file but it has no extension", path))
+        .to_str().unwrap();
+    let mime = from_extension(ext)
+        .expect(&format!("Unsupported filetype {:?} is somehow being fetched", ext));
     let image = smol::fs::read(path).await?;
 
     let res = Response::builder(200)
         .body(image)
-        .content_type(mime::JPEG)
+        .content_type(mime)
         .build();
 
     Ok(res)
@@ -116,7 +122,6 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
     // Check that content type is an image
     //if Some(ContentType::new("image/*")) == req.content_type().base {
     if let Some(mime) = req.content_type() {
-        println!("mime type: {:?}", mime.basetype());
         if mime.basetype() != "image" && mime.basetype() != "video" {
             // Invalid content type
             return Err(to_badreq(anyhow!("Invalid content type {}", mime.essence())));
@@ -164,4 +169,13 @@ async fn get_topic_images(mut req: Request<()>) -> tide::Result {
 
 fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> tide::Error {
     tide::Error::new(StatusCode::BadRequest, e)
+}
+
+fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
+    match extension.as_ref() {
+        "jpeg" => Mime::from_str("image/jpeg").ok(),
+        "mp4" => Mime::from_str("video/mp4").ok(),
+        "mpeg" => Mime::from_str("video/mpeg").ok(),
+        _ => Mime::from_extension(extension),
+    }
 }
