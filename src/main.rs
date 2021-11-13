@@ -1,12 +1,14 @@
 mod types;
 
+use anyhow::anyhow;
 use types::Args;
+use std::fmt::Debug;
 use askama::Template;
 use http_types::mime;
 use smol::prelude::*;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use tide::{log, Body, Request, Response};
+use tide::{log, Body, Request, Response, StatusCode};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -113,24 +115,34 @@ async fn upload_image_page(req: Request<Args>) -> tide::Result {
 async fn upload_image(mut req: Request<Args>) -> tide::Result {
     // Check that content type is an image
     //if Some(ContentType::new("image/*")) == req.content_type().base {
-    //} else {
-    //}
-    let image = req.body_bytes().await?;
-    let topic = req.param("topic")?;
-    let mut fname = req.state().root_dir.clone();//.to_str().unwrap();
-    fname.push(topic);
+    if let Some(mime) = req.content_type() {
+        println!("mime type: {:?}", mime.basetype());
+        if mime.basetype() != "image" && mime.basetype() != "video" {
+            // Invalid content type
+            return Err(to_badreq(anyhow!("Invalid content type {}", mime.essence())));
+        }
 
-    // Create topic if not already created
-    // TODO Ignore result for now, failed likely means dir exists
-    smol::fs::create_dir(fname.clone()).await;
+        let image = req.body_bytes().await?;
+        let topic = req.param("topic")?;
+        let mut fname = req.state().root_dir.clone();//.to_str().unwrap();
+        fname.push(topic);
 
-    // Write image to disk
-    fname.push(format!("{}.jpeg", blake3::hash(&image)));
-    log::debug!("Wrote image {:?}", fname);
+        // Create topic if not already created
+        // TODO Ignore result for now, failed likely means dir exists
+        smol::fs::create_dir(fname.clone()).await;
 
-    smol::fs::write(fname, image).await?;
+        // Write image to disk
+        fname.push(format!("{}.{}",
+                blake3::hash(&image),
+                mime.subtype()));
+        log::debug!("Wrote image {:?}", fname);
 
-    Ok("Success".into())
+        smol::fs::write(fname, image).await?;
+
+        Ok("Success".into())
+    } else {
+        Err(to_badreq(anyhow!("No content provided")))
+    }
 }
 
 /*
@@ -149,3 +161,7 @@ async fn get_topic_images(mut req: Request<()>) -> tide::Result {
     Ok(res)
 }
 */
+
+fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> tide::Error {
+    tide::Error::new(StatusCode::BadRequest, e)
+}

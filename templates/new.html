@@ -20,7 +20,11 @@
             body: selectedFiles[i],
           })
           .then( (res) => {
-              window.location.href = `/${topic}`;
+              if (res.ok) {
+                  window.location.href = `/${topic}`;
+              } else {
+                  alert(`Error: ${res.statusText}` )
+              }
           })
           .catch(function(err) {
             alert(`Error: ${err}` )

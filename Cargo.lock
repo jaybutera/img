@@ -1361,6 +1361,7 @@ checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
 name = "sangha"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "askama",
  "blake3 1.1.0",
  "http-types",
