@@ -3,7 +3,14 @@
 {% block body %}
 
 {% for name in image_names %}
-<img src="/{{ topic }}/{{ name }}" height="300"/>
+{% let ext = name.split(".").last().unwrap() %}
+{% if ext == "mp4" %}
+     <video controls>
+        <source src="/{{ topic }}/{{ name }}" height="300">
+    </video>
+{% else %}
+    <img src="/{{ topic }}/{{ name }}" height="300"/>
+{% endif %}
 {% endfor %}
 
 {% endblock %}
