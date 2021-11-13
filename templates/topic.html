@@ -3,14 +3,28 @@
 {% block body %}
 
 {% for name in image_names %}
+<center>
 {% let ext = name.split(".").last().unwrap() %}
 {% if ext == "mp4" %}
-     <video controls>
-        <source src="/{{ topic }}/{{ name }}" height="300">
+     <video class="media" controls>
+        <source src="/{{ topic }}/{{ name }}">
     </video>
 {% else %}
-    <img src="/{{ topic }}/{{ name }}" height="300"/>
+    <img class="media" src="/{{ topic }}/{{ name }}"/>
 {% endif %}
+</center>
 {% endfor %}
+
+<script>
+const medias = document.getElementsByClassName("media");
+const window_width = window.innerWidth;
+console.log(window_width);
+
+//for (media in medias) {
+for (let i = 0; i < medias.length; i++) {
+    //let is_height = media.height > ;
+    medias[i].width = window_width-50;
+}
+</script>
 
 {% endblock %}
