@@ -1,3 +1,7 @@
+{% extends "nav.html" %}
+
+{% block body %}
+
 <input type="file" multiple id="input-images">
 
 <script>
@@ -10,7 +14,19 @@
           fetch('/{{ topic }}/new-image', {
             method: 'POST',
             body: selectedFiles[i],
+          })
+          .then( (res) => {
+              if (res.ok) {
+                  window.location.href = '/{{ topic }}';
+              } else {
+                  alert(`Error: ${res.statusText}` )
+              }
+          })
+          .catch(function(err) {
+            alert(`Error: ${err}` )
           });
       }
     }
 </script>
+
+{% endblock %}
