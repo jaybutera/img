@@ -11,6 +11,13 @@
     });
 </script>
 
+    <style>
+      img {
+        width: 100%;
+        height: auto;
+      }
+    </style>
+
 {% for name in image_names %}
 <center>
 {% let ext = name.split(".").last().unwrap() %}
@@ -19,21 +26,23 @@
         <source src="/{{ topic }}/{{ name }}">
     </video>
 {% else %}
-    <img class="media lazy" data-src="/{{ topic }}/{{ name }}"/>
+    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'%3E%3C/svg%3E" class="media lazy" data-src="/{{ topic }}/{{ name }}"/>
 {% endif %}
 </center>
 {% endfor %}
 
 <script>
+/*
 const medias = document.getElementsByClassName("media");
 const window_width = window.innerWidth;
-console.log(window_width);
 
 //for (media in medias) {
 for (let i = 0; i < medias.length; i++) {
     //let is_height = media.height > ;
     medias[i].width = window_width-50;
+    //medias[i].height = au
 }
+*/
 </script>
 
 {% endblock %}
