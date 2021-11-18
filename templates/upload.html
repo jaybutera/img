@@ -8,24 +8,30 @@
     const fileInput = document.getElementById('input-images');
     fileInput.onchange = () => {
       const selectedFiles = [...fileInput.files];
-      console.log(selectedFiles);
-      //for (let f in selectedFiles) {
+      let promises = [];
+
       for (let i = 0; i < selectedFiles.length; i++) {
-          fetch('/{{ topic }}/new-image', {
+          let p = fetch('/{{ topic }}/new-image', {
             method: 'POST',
             body: selectedFiles[i],
-          })
-          .then( (res) => {
+          });
+          promises.push(p);
+      }
+
+      Promise.all(promises)
+          .then( (responses) => {
+              const res = responses[0];
               if (res.ok) {
                   window.location.href = '/{{ topic }}';
               } else {
-                  alert(`Error: ${res.statusText}` )
+                  if (res) {
+                      alert(`Error: ${res.statusText}` )
+                  }
               }
           })
           .catch(function(err) {
             alert(`Error: ${err}` )
           });
-      }
     }
 </script>
 
