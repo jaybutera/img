@@ -60,6 +60,7 @@ async fn get_image(req: Request<Args>) -> tide::Result {
 
     let res = Response::builder(200)
         .body(image)
+        .header(tide::http::headers::ACCEPT_RANGES, "bytes")
         .content_type(mime)
         .build();
 
