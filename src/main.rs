@@ -21,6 +21,7 @@ async fn main_async() -> tide::Result<()> {
     let mut app = tide::with_state(args);
     log::start();
 
+    app.at("/").get(new_page);
     app.at("/new").get(new_page);
     app.at("/:topic/new").get(upload_image_page);
     app.at("/:topic/new-image").post(upload_image);
