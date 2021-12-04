@@ -11,15 +11,23 @@
 }
 </style>
 
-<center>
-<input type="text" id="new-topic" placeholder="topic">
-<br />
-<input type="file" multiple id="input-images">
-<br />
-<button id="submit-topic">Submit</button>
-</center>
+<div id="new-form">
+    <center>
+    <input type="text" id="new-topic" placeholder="topic">
+    <br />
+    <input type="file" multiple id="input-images">
+    <br />
+    <button id="submit-topic">Submit</button>
+    </center>
+</div>
 
 <script>
+    const loading_html = `
+    <center>
+    <h1 style="color:white;">uploading...</h1>
+    <p style="color:white;">(don't leave this page)</p>
+    </center>
+    `;
     const topic_elem = document.getElementById("new-topic");
     const submit = document.getElementById("submit-topic");
     const fileInput = document.getElementById('input-images');
@@ -28,6 +36,8 @@
       const topic = topic_elem.value;
       const selectedFiles = [...fileInput.files];
       let promises = [];
+
+      document.getElementById("new-form").innerHTML = loading_html;
 
       for (let i = 0; i < selectedFiles.length; i++) {
           let p = fetch('/' + topic + '/new-image', {
