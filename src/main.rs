@@ -46,7 +46,7 @@ async fn new_page(req: Request<Args>) -> tide::Result {
 }
 
 async fn get_image(req: Request<Args>) -> tide::Result {
-    let topic = req.param("topic")?;
+    let topic = req.param("topic")?.to_lowercase();
     let name = req.param("name")?;
     let mut path = req.state().root_dir.clone();
     path.push(topic);
@@ -69,7 +69,7 @@ async fn get_image(req: Request<Args>) -> tide::Result {
 }
 
 async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {
-    let topic = req.param("topic")?;
+    let topic = req.param("topic")?.to_lowercase();
     let mut path = req.state().root_dir.clone();
     path.push(topic);
 
@@ -88,9 +88,9 @@ async fn image_list(path: PathBuf) -> tide::Result<Vec<String>> {
 }
 
 async fn images_page(req: Request<Args>) -> tide::Result {
-    let topic = req.param("topic")?;
+    let topic = req.param("topic")?.to_lowercase();
     let mut path = req.state().root_dir.clone();
-    path.push(topic);
+    path.push(topic.clone());
 
     let image_names = image_list(path).await?;
     let page = types::TopicTemplate {
@@ -107,7 +107,7 @@ async fn images_page(req: Request<Args>) -> tide::Result {
 }
 
 async fn upload_image_page(req: Request<Args>) -> tide::Result {
-    let topic = req.param("topic")?;
+    let topic = req.param("topic")?.to_lowercase();
     let page = types::UploadTemplate {
         topic: topic.into()
     };
@@ -130,7 +130,7 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
         }
 
         let image = req.body_bytes().await?;
-        let topic = req.param("topic")?;
+        let topic = req.param("topic")?.to_lowercase();
         let mut fname = req.state().root_dir.clone();//.to_str().unwrap();
         fname.push(topic);
 
