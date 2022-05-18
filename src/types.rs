@@ -3,7 +3,19 @@ use askama::Template;
 use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+pub struct HashVal([u8; 32]);
+
 pub type MediaUid = String;
+
+/*
+impl std::fmt::Display for HashVal {
+    // This trait requires `fmt` with this exact signature.
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+*/
 
 #[derive(Template)]
 #[template(path = "upload.html")]
@@ -14,7 +26,7 @@ pub struct UploadTemplate {
 #[derive(Template)]
 #[template(path = "topic.html")]
 pub struct TopicTemplate {
-    pub image_names: Vec<String>,
+    pub image_names: Vec<MediaUid>,
     pub topic: String,
 }
 

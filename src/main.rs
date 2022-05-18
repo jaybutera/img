@@ -1,5 +1,6 @@
 mod types;
 
+use types::{TopicData, MediaUid};
 use anyhow::anyhow;
 use types::Args;
 use std::fmt::Debug;
@@ -13,6 +14,11 @@ use tide::{log, Body, Request, Response, StatusCode};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
+}
+
+fn normalize_topic(topic: &str) -> String {
+    // TODO remove spaces and punctuation
+    topic.to_lowercase()
 }
 
 async fn main_async() -> tide::Result<()> {
@@ -46,10 +52,10 @@ async fn new_page(req: Request<Args>) -> tide::Result {
 }
 
 async fn get_image(req: Request<Args>) -> tide::Result {
-    let topic = req.param("topic")?.to_lowercase();
+    let topic = normalize_topic(req.param("topic")?);
     let name = req.param("name")?;
     let mut path = req.state().root_dir.clone();
-    path.push(topic);
+    //path.push(topic);
     path.push(name);
 
     let ext = path.extension()
@@ -69,7 +75,7 @@ async fn get_image(req: Request<Args>) -> tide::Result {
 }
 
 async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {
-    let topic = req.param("topic")?.to_lowercase();
+    let topic = normalize_topic(req.param("topic")?);
     let mut path = req.state().root_dir.clone();
     path.push(topic);
 
@@ -77,20 +83,27 @@ async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {
     Ok(Body::from_json(&image_list)?)
 }
 
-async fn image_list(path: PathBuf) -> tide::Result<Vec<String>> {
+async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
+    /*
     let image_name_stream = smol::fs::read_dir(path).await?;
     let image_names: Vec<String> = image_name_stream
         .map(|entry| entry.unwrap().file_name())
         .map(|ostr| ostr.into_string().unwrap())
         .collect().await;
+    */
+
+    // Read the TopicData file to get the image names
+    let raw_topic_data = smol::fs::read(path).await?;
+    let topic_data: TopicData = serde_json::from_slice(&raw_topic_data)?;
+    let image_names = topic_data.media;
 
     Ok(image_names)
 }
 
 async fn images_page(req: Request<Args>) -> tide::Result {
-    let topic = req.param("topic")?.to_lowercase();
+    let topic = normalize_topic(req.param("topic")?);
     let mut path = req.state().root_dir.clone();
-    path.push(topic.clone());
+    path.push(format!("{}.json", topic.clone()));
 
     let image_names = image_list(path).await?;
     let page = types::TopicTemplate {
@@ -107,7 +120,7 @@ async fn images_page(req: Request<Args>) -> tide::Result {
 }
 
 async fn upload_image_page(req: Request<Args>) -> tide::Result {
-    let topic = req.param("topic")?.to_lowercase();
+    let topic = normalize_topic(req.param("topic")?);
     let page = types::UploadTemplate {
         topic: topic.into()
     };
@@ -130,18 +143,21 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
         }
 
         let image = req.body_bytes().await?;
-        let topic = req.param("topic")?.to_lowercase();
-        let mut fname = req.state().root_dir.clone();//.to_str().unwrap();
-        fname.push(topic);
+        let image_name = blake3::hash(&image).to_string();
+        let topic = normalize_topic(req.param("topic")?);
+        let mut fname = req.state().root_dir.clone();
+        //fname.push(topic);
 
         // Create topic if not already created
         // TODO Ignore result for now, failed likely means dir exists
-        smol::fs::create_dir(fname.clone()).await;
+        //smol::fs::create_dir(fname.clone()).await;
+        create_topic_file(topic, vec![image_name.clone()]);
 
         // Write image to disk
         fname.push(format!("{}.{}",
-                blake3::hash(&image),
+                image_name,
                 mime.subtype()));
+
         log::debug!("Wrote image {:?}", fname);
 
         smol::fs::write(fname, image).await?;
@@ -150,6 +166,12 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
     } else {
         Err(to_badreq(anyhow!("No content provided")))
     }
+}
+
+async fn create_topic_file(name: String, media: Vec<MediaUid>) -> Result<(),std::io::Error> {
+    let fname = format!("{}.json", name);
+    let bytes = serde_json::to_vec(&TopicData { name, media })?;
+    smol::fs::write(fname, bytes).await
 }
 
 /*
