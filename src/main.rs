@@ -11,6 +11,7 @@ use smol::prelude::*;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use tide::{log, Body, Request, Response, StatusCode};
+use acidjson::AcidJson;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -95,7 +96,7 @@ async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
     // Read the TopicData file to get the image names
     let raw_topic_data = smol::fs::read(path).await?;
     let topic_data: TopicData = serde_json::from_slice(&raw_topic_data)?;
-    let image_names = topic_data.media;
+    let image_names = topic_data.list();
 
     Ok(image_names)
 }
@@ -147,20 +148,22 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
         let topic = normalize_topic(req.param("topic")?);
         let mut fname = req.state().root_dir.clone();
         //fname.push(topic);
-
-        // Create topic if not already created
-        // TODO Ignore result for now, failed likely means dir exists
-        //smol::fs::create_dir(fname.clone()).await;
-        create_topic_file(topic, vec![image_name.clone()]);
-
-        // Write image to disk
         fname.push(format!("{}.{}",
                 image_name,
                 mime.subtype()));
 
-        log::debug!("Wrote image {:?}", fname);
+        // Create topic if not already created
+        // TODO Ignore result for now, failed likely means dir exists
+        //smol::fs::create_dir(fname.clone()).await;
 
-        smol::fs::write(fname, image).await?;
+        let topic_file: AcidJson<TopicData> = AcidJson::open(&fname)?;
+        let mut td = topic_file.write();
+        td.add(vec![image_name]);
+        //create_topic_file(topic, vec![image_name.clone()]);
+
+        // Write image to disk
+        //smol::fs::write(fname, image).await?;
+        log::debug!("Wrote image {:?}", fname);
 
         Ok("Success".into())
     } else {
@@ -168,11 +171,16 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
     }
 }
 
-async fn create_topic_file(name: String, media: Vec<MediaUid>) -> Result<(),std::io::Error> {
+/*
+async fn create_topic_file(name: String, media: Vec<MediaUid>) -> Result<(), std::io::Error> {
     let fname = format!("{}.json", name);
-    let bytes = serde_json::to_vec(&TopicData { name, media })?;
+    let revs = vec![];
+    let bytes = serde_json::to_vec(&topicdata { name, media, revs })?;
+
+    // todo if file already exists, add a add revision?
     smol::fs::write(fname, bytes).await
 }
+*/
 
 /*
 async fn get_topic_images(mut req: Request<()>) -> tide::Result {

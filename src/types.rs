@@ -47,8 +47,34 @@ pub struct Args {
 pub struct TopicData {
     /// Topic name
     pub name: String,
-    /// Ordered list of media files
-    pub media: Vec<MediaUid>,
+    // Ordered list of media files
+    //pub media: Vec<MediaUid>,
+    // A stack of revisions, each revision is an ordered list of specific revision operations
+    /// A stack of revision operations
+    pub revs: Vec<RevisionOp>,
+}
+
+impl TopicData {
+    pub fn add(&mut self, media: Vec<MediaUid>) {
+        self.revs.push(RevisionOp::Add(media));
+    }
+
+    pub fn rm(&mut self, media: Vec<MediaUid>) {
+        self.revs.push(RevisionOp::Del(media));
+    }
+
+    pub fn list(&self) -> Vec<MediaUid> {
+        let mut acc = vec![];
+
+        for rev in self.revs.iter() {
+            match rev {
+                RevisionOp::Add(v) => acc.append(&mut v.clone()),
+                RevisionOp::Del(v) => acc.retain(|x| !v.contains(x)),
+            }
+        }
+
+        acc
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq)]
@@ -57,6 +83,7 @@ pub enum RevisionOp {
     Del(Vec<MediaUid>),
 }
 
+/*
 #[derive(Serialize, Deserialize)]
 pub struct TopicRevisionHistory {
     /// Topic name
@@ -64,3 +91,4 @@ pub struct TopicRevisionHistory {
     // A stack of revisions, each revision is an ordered list of specific revision operations
     pub revs: Vec<Vec<RevisionOp>>,
 }
+*/
