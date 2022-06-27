@@ -1,11 +1,11 @@
-# Sangha
+# Img
 
 #### A way to share a collection of photos and videos by name.
 
 ## What is it?
-Sangha is essentially an open wiki for media. Anybody can create a topic by adding photos to it. The topic is an easily accessible url by anyone that knows it exists. Multiple people can upload to a single topic. It's an easy way to share photos with friends around an event, like a trip you took together, or an idea like cool art you find.
+Img is essentially an open wiki for media. Anybody can create a topic by adding photos to it. The topic is an easily accessible url by anyone that knows it exists. Multiple people can upload to a single topic. It's an easy way to share photos with friends around an event, like a trip you took together, or an idea like cool art you find.
 
-Sangha also makes downloading the images easy so they aren't locked in the cloud. Raw images are served at an endpoint which other tools can access and build on top of. Such tools may provide better UI's for viewing and organizing photos, or display collections in a native app. Sangha stores images without compressing, the original quality is preserved.
+Img also makes downloading the images easy so they aren't locked in the cloud. Raw images are served at an endpoint which other tools can access and build on top of. Such tools may provide better UI's for viewing and organizing photos, or display collections in a native app. Sangha stores images without compressing, the original quality is preserved.
 
 ## Why does this exist?
 Currently there's no organized and secure way to share photos. The choices are to host on a cloud like Google Photos, but the photos are then compressed and difficult to get back off the cloud and it's also not easy to share an album and have people add to it. Group messaging apps like Telegram and Signal are also used, but photos are not organized and get buried under new messages. Photos from these apps are also only stored on people's phones and so may be lost. And again it's not easy to share with new people.
