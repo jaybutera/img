@@ -1,6 +1,15 @@
 # Img
 
-#### A way to share a collection of photos and videos by name.
+#### Collectively share photo and video albums at their original quality, completely sovereign
+
+## How To Use It
+#### Make a new Collection
+You can start a new collection of photos/videos either from the homepage
+![image](https://github.com/jaybutera/img/assets/2101658/55f04e3e-b444-4924-9d93-7f48fc463544)
+
+Or from any other page with "New Collection" in the top left corner. Just upload some initial pictures/videos to start it.
+
+
 
 ## What is it?
 Img is essentially an open wiki for media. Anybody can create a topic by adding photos to it. The topic is an easily accessible url by anyone that knows it exists. Multiple people can upload to a single topic. It's an easy way to share photos with friends around an event, like a trip you took together, or an idea like cool art you find.
