@@ -56,10 +56,16 @@ pub struct TopicData {
 
 impl TopicData {
     pub fn add(&mut self, media: Vec<MediaUid>) {
+        // First remove any media that is already in the list
+        let mut media = media;
+        media.retain(|x| !self.list().contains(x));
         self.revs.push(RevisionOp::Add(media));
     }
 
     pub fn rm(&mut self, media: Vec<MediaUid>) {
+        // First remove any media that is already in the list
+        let mut media = media;
+        media.retain(|x| !self.list().contains(x));
         self.revs.push(RevisionOp::Del(media));
     }
 
@@ -82,6 +88,23 @@ pub enum RevisionOp {
     Add(Vec<MediaUid>),
     Del(Vec<MediaUid>),
 }
+
+/*
+pub struct Topic {
+    pub name: String,
+    pub data: AcidJson<TopicData>,
+}
+
+pub impl Topic {
+    pub fn open(name: &str) -> Topic {
+        let data = AcidJson::open(name).unwrap();
+        Topic {
+            name: name.to_string(),
+            data,
+        }
+    }
+}
+*/
 
 /*
 #[derive(Serialize, Deserialize)]

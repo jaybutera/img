@@ -999,6 +999,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "img"
+version = "0.1.0"
+dependencies = [
+ "acidjson",
+ "anyhow",
+ "askama",
+ "blake3 1.1.0",
+ "http-types",
+ "serde",
+ "serde_json",
+ "smol",
+ "structopt",
+ "tide",
+]
+
+[[package]]
 name = "infer"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1397,22 +1413,6 @@ name = "ryu"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
-
-[[package]]
-name = "sangha"
-version = "0.1.0"
-dependencies = [
- "acidjson",
- "anyhow",
- "askama",
- "blake3 1.1.0",
- "http-types",
- "serde",
- "serde_json",
- "smol",
- "structopt",
- "tide",
-]
 
 [[package]]
 name = "semver"
