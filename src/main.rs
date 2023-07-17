@@ -81,6 +81,7 @@ async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {
     Ok(Body::from_json(&image_list)?)
 }
 
+// TODO open with AcidJson to avoid concurrency issues
 async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
     // Read the TopicData file to get the image names
     let raw_topic_data = smol::fs::read(path).await?;
