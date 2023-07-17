@@ -3,13 +3,14 @@
 #### Collectively share photo and video albums at their original quality, completely sovereign
 
 ## How To Use It
+![topic screenshot](https://github.com/jaybutera/img/blob/master/static/testimg.png)
 #### Make a new Collection
-You can start a new collection of photos/videos either from the homepage
-![image](https://github.com/jaybutera/img/assets/2101658/55f04e3e-b444-4924-9d93-7f48fc463544)
+You can start a new collection from any page with "New Collection" in the top left corner. This will take you to the homepage. Just make a name and upload some initial pictures/videos to start it.
 
-Or from any other page with "New Collection" in the top left corner. Just upload some initial pictures/videos to start it.
+![homepage](https://github.com/jaybutera/img/assets/2101658/55f04e3e-b444-4924-9d93-7f48fc463544)
 
-
+#### Add photos to an existing collection
+From the first screenshot you'll see the "Add Photos" button in the top-right corner.
 
 ## What is it?
 Img is essentially an open wiki for media. Anybody can create a topic by adding photos to it. The topic is an easily accessible url by anyone that knows it exists. Multiple people can upload to a single topic. It's an easy way to share photos with friends around an event, like a trip you took together, or an idea like cool art you find.
@@ -21,6 +22,11 @@ Currently there's no organized and secure way to share photos. The choices are t
 
 ## How?
 Upon hosting your own sovereign server at example.com, to start a collection around your trip to alaska with friends, just visit `example.com/alaska/new` and upload your photos. Visit `example.com/alaska` to see them.
+
+## Cool features
+All photos are stored by (named by their hash) in one directory. Each collection is represented with a json file which stores the version history of adds/removes/reorders. A collection is a list of image references and the display order can be rearranged just by changing the json list.
+
+Adding and removing photos can easily be done in command line as img provides standard API endpoints for standard operations (add/remove/etc). Bulk uploads are one simple bash script away. This makes img a nice blend between user-friendly photo-sharing service and a minimal/robust solution for photo storage and archival.
 
 ## Future Features
 Eventually it would be nice to have a @user tag option in the url. Collections under a user tag can be permissioned as configured by the user. A user can decide who can see a collection and who can add to it. However sangha is designed to be small and do one thing well. User tags would require coupling the tool to a specific identity platform like Twitter or ActivityPub or ENS.
