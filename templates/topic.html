@@ -31,7 +31,7 @@
 {% let ext = name.split(".").last().unwrap() %}
 {% if ext == "mp4" %}
     <video width="100%" class="media" type="video/mp4; codecs=avc1" controls>
-        <source src="/{{ topic }}/{{ name }}">
+        <source src="/img/{{ name }}">
     </video>
 {% else %}
     <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'%3E%3C/svg%3E" class="media lazy" data-src="/img/{{ name }}"/>
