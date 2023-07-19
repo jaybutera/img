@@ -12,6 +12,8 @@ use structopt::StructOpt;
 use tide::{log, Body, Request, Response, StatusCode};
 use acidjson::AcidJson;
 use smol::io::AsyncWriteExt;
+use http_types::headers::HeaderValue;
+use tide::security::{CorsMiddleware, Origin};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -24,8 +26,14 @@ fn normalize_topic(topic: &str) -> String {
 async fn main_async() -> tide::Result<()> {
     let args = types::Args::from_args();
     let port = args.port;
-    let mut app = tide::with_state(args);
     log::start();
+
+    let mut app = tide::with_state(args);
+    let cors = CorsMiddleware::new()
+        .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
+        .allow_origin(Origin::from("*"))
+        .allow_credentials(false);
+    app.with(cors);
 
     app.at("/").get(new_page);
     app.at("/new").get(new_page);
