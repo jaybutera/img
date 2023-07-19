@@ -34,7 +34,7 @@ async fn main_async() -> tide::Result<()> {
     //app.at("/:topic/raw").get(get_topic_images);
     app.at("/:topic").get(images_page);
     app.at("/:topic/images").get(get_image_list);
-    app.at(":topic/:name").get(get_image);
+    app.at("/img/:name").get(get_image);
     app.listen(format!("0.0.0.0:{}", port)).await?;
 
     Ok(())
