@@ -83,6 +83,12 @@ impl TopicData {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Index {
+    pub name: String,
+    pub topics: Vec<String>,
+}
+
 #[derive(Serialize, Deserialize, PartialEq)]
 pub enum RevisionOp {
     Add(Vec<MediaUid>),

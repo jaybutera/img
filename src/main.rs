@@ -1,6 +1,6 @@
 mod types;
 
-use types::{TopicData, MediaUid};
+use types::{Index, TopicData, MediaUid};
 use anyhow::anyhow;
 use types::Args;
 use std::fmt::Debug;
@@ -11,14 +11,14 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use tide::{log, Body, Request, Response, StatusCode};
 use acidjson::AcidJson;
+use smol::io::AsyncWriteExt;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
 }
 
 fn normalize_topic(topic: &str) -> String {
-    // TODO remove spaces and punctuation
-    topic.to_lowercase().replace(" ", "").trim().to_string()
+    topic.to_lowercase().replace(" ", "-").replace(".", "_").trim().to_string()
 }
 
 async fn main_async() -> tide::Result<()> {
@@ -30,6 +30,8 @@ async fn main_async() -> tide::Result<()> {
     app.at("/").get(new_page);
     app.at("/new").get(new_page);
     app.at("/:topic/new").get(upload_image_page);
+    app.at("/new-index").post(create_index);
+    app.at("/index/:name").get(get_index);
     app.at("/:topic/new-image").post(upload_image);
     //app.at("/:topic/raw").get(get_topic_images);
     app.at("/:topic").get(images_page);
@@ -38,6 +40,41 @@ async fn main_async() -> tide::Result<()> {
     app.listen(format!("0.0.0.0:{}", port)).await?;
 
     Ok(())
+}
+
+async fn get_index(req: Request<Args>) -> tide::Result {
+    let name = req.param("name")?;
+    let mut path = req.state().root_dir.clone();
+    path.push(format!("{}.json", name));
+
+    let index = smol::fs::read_to_string(path).await?;
+
+    let res = Response::builder(200)
+        .body(index)
+        .content_type(mime::JSON)
+        .build();
+
+    Ok(res)
+}
+
+/// Request contains a json file for the index which is saved into /indexes/<name>.json
+async fn create_index(mut req: Request<Args>) -> tide::Result {
+    let index: Index = req.body_json().await?;
+    let name = normalize_topic(&index.name);
+    let mut path = req.state().root_dir.clone();
+    path.push(format!("{}.json", name));
+
+    if path.exists() {
+        return Err(to_badreq(anyhow!("Index already exists")));
+    }
+
+    // write index json file
+    let index_str = serde_json::to_string(&index)?;
+    let mut file = smol::fs::File::create(path).await?;
+    file.write_all(index_str.as_bytes()).await?;
+
+    Ok(Response::new(StatusCode::Ok))
+
 }
 
 async fn new_page(req: Request<Args>) -> tide::Result {
