@@ -1,35 +1,60 @@
 <script>
+
+    import 'bootstrap/dist/css/bootstrap.min.css';
     export let data;
     const imgs = data.images;
-    const img_server = "https://img.smdhi.xyz";
 </script>
 
 <style>
     body {
-        margin: 0;
-        padding: 0;
+        height: 100%;
     }
-    .grid {
+    .new-form {
+        width: 100%;
+        height: 100%;
         display: flex;
-        justify-content: space-evenly;
-        flex-wrap: wrap;
+        flex-direction: column;
         align-items: center;
+        margin-top: 100px;
     }
-    .media-container {
-        max-width: 33%;
+    .new-topic {
+        width: 50%;
+        height: 50px;
+        font-size: 20px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin: 30px;
     }
-    .media {
-        max-width: 100%;
+    .input-images {
+        width: 50%;
+        height: 50px;
+        font-size: 20px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin: 10px;
+    }
+    .submit-topic {
+        width: 50%;
+        height: 50px;
+        font-size: 20px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin: 30px;
+        background-color: #ccc;
+    }
+    h1 {
+        margin-top: 100px;
+        text-align: center;
     }
 </style>
 
-<div class="grid">
-    {#each imgs as name (name)}
-        <div class="media-container">
-            <a href="{ img_server }/img/{ name }">
-                <img class="media" src="{img_server}/img/{ name }"/>
-                <!--<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'%3E%3C/svg%3E" class="media lazy" data-src="{{img_server}}/img/{{ name }}"/>-->
-            </a>
-        </div>
-    {/each}
+<h1>Start a New Collection!</h1>
+<div class="new-form">
+    <input type="text" class="new-topic" placeholder="topic name">
+    <input type="file" multiple class="input-images">
+    <button class="submit-topic">Submit</button>
 </div>
+
