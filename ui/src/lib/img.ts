@@ -1,10 +1,11 @@
 // Img server address
-const img_server: string = "http://localhost:5173";
+//const img_server: string = "http://localhost:2342";
+const img_server: string = "https://img.smdhi.xyz";
 
-async function get_image_names(): Promise<string[]> {
+export async function get_image_names(topic: string): Promise<string[]> {
   try {
     // Make a GET request to the endpoint
-    const response = await fetch(f'{img_server}/{topic}/images');
+    const response = await fetch(`${img_server}/${topic}/images`);
 
     // If the request was successful, parse the response as JSON
     if (response.ok) {
@@ -19,4 +20,3 @@ async function get_image_names(): Promise<string[]> {
     return [];
   }
 }
-
