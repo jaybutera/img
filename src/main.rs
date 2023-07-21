@@ -15,7 +15,8 @@ use smol::io::AsyncWriteExt;
 use http_types::headers::HeaderValue;
 use tide::security::{CorsMiddleware, Origin};
 use async_fs::File;
-use smol::io::AsyncReadExt;
+use smol::io::{AsyncReadExt, BufReader};
+use smol::stream::StreamExt;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -27,6 +28,13 @@ fn normalize_topic(topic: &str) -> String {
 
 async fn main_async() -> tide::Result<()> {
     let args = types::Args::from_args();
+
+    // If migrate is true, run migrate function instead of starting server
+    if args.migrate {
+        migrate(&args.root_dir).await?;
+        return Ok(());
+    }
+
     let port = args.port;
     log::start();
 
@@ -171,39 +179,56 @@ async fn upload_image_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
-/// the file as the uid, and the extension of the file.
-async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Result<String> {
-    let mime = req.content_type().ok_or(anyhow!("No content type"))?;
+async fn migrate(root_dir: &PathBuf) -> anyhow::Result<()> {
+    // Loop over every image and video file in the root directory
+    let mut entries = smol::fs::read_dir(root_dir).await?;
+    // Change the name of the file to the hash of the first 1MB of the file
+    while let Some(entry) = entries.try_next().await? {
+        // Filter to extensions mp4, jpg, jpeg, png
+        let path = entry.path();
+        // If no extension, skip
+        let ext = path.extension()
+            .map(|ext| ext.to_str().unwrap())
+            .unwrap_or_default();
 
-    // Invalid content type
-    if mime.basetype() != "image"
-            && mime.basetype() != "video" {
-        return Err(anyhow!("Invalid content type {}", mime.essence()));
+        if ext != "mp4" && ext != "jpg" && ext != "jpeg" && ext != "png" {
+            continue;
+        }
+
+        let mut file = smol::fs::File::open(&path).await?;
+        let mut reader = smol::io::BufReader::new(file);
+        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
+        let bytes_read = reader.read(&mut buffer).await?;
+        let chunk = &buffer[..bytes_read];
+        let uid = blake3::hash(chunk).to_string();
+        let fname = format!("{}.{}", uid, ext);
+
+        // Rename the file
+        let new_path = root_dir.join(&fname);
+        smol::fs::rename(path, new_path).await?;
     }
 
-    // Start the buf reader
-    let mut reader = smol::io::BufReader::new(req.take_body());
+    Ok(())
+}
+
+/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
+/// the file as the uid, and the extension of the file.
+//async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Result<String> {
+async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) -> anyhow::Result<String> {
     let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
     let bytes_read = reader.read(&mut buffer).await?;
     let chunk = &buffer[..bytes_read];
 
     // Hash the first 1MB for the uid
     let uid = blake3::hash(chunk).to_string();
-    log::info!("uid: {}", uid);
-    //let uid = "tmp".to_string();
 
     // Generate path
-    let image_fname = format!("{}.{}",
-            uid,
-            mime.subtype());
+    let image_fname = format!("{}.{}", uid, ext);
     let image_path = root_dir.join(&image_fname);
 
     // Read and write the file
     if !image_path.exists() {
         let mut image_file = File::create(&image_path).await?;
-        //let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        //let mut reader = smol::io::BufReader::new(req.take_body());
 
         // Write the first chunk
         image_file.write_all(chunk).await?;
@@ -224,15 +249,24 @@ async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Resul
     Ok(image_fname)
 }
 
-async fn upload_image(req: Request<Args>) -> tide::Result {
+async fn upload_image(mut req: Request<Args>) -> tide::Result {
+    let mime = req.content_type().ok_or(anyhow!("No content type"))?;
+
+    // Invalid content type
+    if mime.basetype() != "image"
+            && mime.basetype() != "video" {
+        return Err(to_badreq(anyhow!("Invalid content type {}", mime.essence())));
+    }
+
     // Topic path
     let topic = normalize_topic(req.param("topic")?);
     let mut topic_path = req.state().root_dir.clone();
     topic_path.push(format!("{}.json", topic));
 
     // Add the image if its not already in the root dir
+    let mut reader = smol::io::BufReader::new(req.take_body());
     let mut root_dir = req.state().root_dir.clone();
-    let image_fname = save_media(req, &root_dir).await?;
+    let image_fname = save_media(reader, &root_dir, mime.subtype()).await?;
 
     // Create topic file if not already created
     if !topic_path.exists() {

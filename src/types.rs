@@ -41,6 +41,8 @@ pub struct Args {
     pub root_dir: PathBuf,
     #[structopt(short, long, default_value = "2342")]
     pub port: u32,
+    #[structopt(short, long)]
+    pub migrate: bool,
 }
 
 #[derive(Serialize, Deserialize)]
