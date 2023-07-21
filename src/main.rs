@@ -182,14 +182,16 @@ async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Resul
         return Err(anyhow!("Invalid content type {}", mime.essence()));
     }
 
+    // Start the buf reader
+    let mut reader = smol::io::BufReader::new(req.take_body());
+    let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
+    let bytes_read = reader.read(&mut buffer).await?;
+    let chunk = &buffer[..bytes_read];
+
     // Hash the first 1MB for the uid
-    let uid = {
-        let mut reader = smol::io::BufReader::new(req.take_body());
-        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        let bytes_read = reader.read(&mut buffer).await?;
-        let chunk = &buffer[..bytes_read];
-        blake3::hash(chunk).to_string()
-    };
+    let uid = blake3::hash(chunk).to_string();
+    log::info!("uid: {}", uid);
+    //let uid = "tmp".to_string();
 
     // Generate path
     let image_fname = format!("{}.{}",
@@ -200,9 +202,14 @@ async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Resul
     // Read and write the file
     if !image_path.exists() {
         let mut image_file = File::create(&image_path).await?;
-        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        let mut reader = smol::io::BufReader::new(req.take_body());
+        //let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
+        //let mut reader = smol::io::BufReader::new(req.take_body());
 
+        // Write the first chunk
+        image_file.write_all(chunk).await?;
+        image_file.flush().await?;
+
+        // Loop the rest
         while let Ok(bytes_read) = reader.read(&mut buffer).await {
             if bytes_read == 0 {
                 break;
