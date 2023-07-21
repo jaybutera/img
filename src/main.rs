@@ -14,6 +14,8 @@ use acidjson::AcidJson;
 use smol::io::AsyncWriteExt;
 use http_types::headers::HeaderValue;
 use tide::security::{CorsMiddleware, Origin};
+use async_fs::File;
+use smol::io::AsyncReadExt;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -169,55 +171,78 @@ async fn upload_image_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-async fn upload_image(mut req: Request<Args>) -> tide::Result {
-    // Check that content type is an image
-    //if Some(ContentType::new("image/*")) == req.content_type().base {
-    if let Some(mime) = req.content_type() {
-        if mime.basetype() != "image"
+/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
+/// the file as the uid, and the extension of the file.
+async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Result<String> {
+    let mime = req.content_type().ok_or(anyhow!("No content type"))?;
+
+    // Invalid content type
+    if mime.basetype() != "image"
             && mime.basetype() != "video" {
-            //&& mime.essence() != "multipart/form-data" {
-            // Invalid content type
-            return Err(to_badreq(anyhow!("Invalid content type {}", mime.essence())));
-        }
-
-        let image = req.body_bytes().await?;
-        let image_name = blake3::hash(&image).to_string();
-        let image_fname = format!("{}.{}",
-                image_name,
-                mime.subtype());
-        let topic = normalize_topic(req.param("topic")?);
-
-        // Image path
-        let mut image_path = req.state().root_dir.clone();
-        image_path.push(image_fname.clone());
-
-        // Topic path
-        let mut topic_path = req.state().root_dir.clone();
-        topic_path.push(format!("{}.json", topic));
-
-        // Create topic file if not already created
-        if !topic_path.exists() {
-            smol::fs::write(topic_path.clone(),
-                            serde_json::to_vec(&TopicData {
-                                name: topic,
-                                revs: vec![],
-                            }).unwrap()).await?;
-        }
-
-        {
-            let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)?;
-            let mut td = topic_file.write();
-            td.add(vec![image_fname]);
-        }
-
-        // Write image to disk
-        smol::fs::write(&image_path, image).await?;
-        log::debug!("Wrote image {:?}", image_path);
-
-        Ok("Success".into())
-    } else {
-        Err(to_badreq(anyhow!("No content provided")))
+        return Err(anyhow!("Invalid content type {}", mime.essence()));
     }
+
+    // Hash the first 1MB for the uid
+    let uid = {
+        let mut reader = smol::io::BufReader::new(req.take_body());
+        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
+        let bytes_read = reader.read(&mut buffer).await?;
+        let chunk = &buffer[..bytes_read];
+        blake3::hash(chunk).to_string()
+    };
+
+    // Generate path
+    let image_fname = format!("{}.{}",
+            uid,
+            mime.subtype());
+    let image_path = root_dir.join(&image_fname);
+
+    // Read and write the file
+    if !image_path.exists() {
+        let mut image_file = File::create(&image_path).await?;
+        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
+        let mut reader = smol::io::BufReader::new(req.take_body());
+
+        while let Ok(bytes_read) = reader.read(&mut buffer).await {
+            if bytes_read == 0 {
+                break;
+            }
+
+            let chunk = &buffer[..bytes_read];
+            image_file.write_all(chunk).await?;
+            image_file.flush().await?;
+        }
+    }
+
+    Ok(image_fname)
+}
+
+async fn upload_image(req: Request<Args>) -> tide::Result {
+    // Topic path
+    let topic = normalize_topic(req.param("topic")?);
+    let mut topic_path = req.state().root_dir.clone();
+    topic_path.push(format!("{}.json", topic));
+
+    // Add the image if its not already in the root dir
+    let mut root_dir = req.state().root_dir.clone();
+    let image_fname = save_media(req, &root_dir).await?;
+
+    // Create topic file if not already created
+    if !topic_path.exists() {
+        smol::fs::write(topic_path.clone(),
+                        serde_json::to_vec(&TopicData {
+                            name: topic,
+                            revs: vec![],
+                        }).unwrap()).await?;
+    }
+
+    { // Add media to topic
+        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)?;
+        let mut td = topic_file.write();
+        td.add(vec![image_fname]);
+    }
+
+    Ok("Success".into())
 }
 
 fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> tide::Error {

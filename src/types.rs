@@ -55,10 +55,14 @@ pub struct TopicData {
 }
 
 impl TopicData {
+    pub fn contains(&self, media: &MediaUid) -> bool {
+        self.list().contains(media)
+    }
+
     pub fn add(&mut self, media: Vec<MediaUid>) {
         // First remove any media that is already in the list
         let mut media = media;
-        media.retain(|x| !self.list().contains(x));
+        media.retain(|x| !self.contains(x));
         self.revs.push(RevisionOp::Add(media));
     }
 
