@@ -1,6 +1,6 @@
 <script>
-
     import 'bootstrap/dist/css/bootstrap.min.css';
+    import Nav from '../components/Nav.svelte';
     export let data;
     const imgs = data.images;
 </script>
@@ -17,31 +17,21 @@
         align-items: center;
         margin-top: 100px;
     }
-    .new-topic {
-        width: 50%;
+    .nt-form {
+        width: 30%;
         height: 50px;
         font-size: 20px;
         border-radius: 10px;
         border: 1px solid #ccc;
         padding: 10px;
+    }
+    .new-topic {
         margin: 30px;
     }
     .input-images {
-        width: 50%;
-        height: 50px;
-        font-size: 20px;
-        border-radius: 10px;
-        border: 1px solid #ccc;
-        padding: 10px;
         margin: 10px;
     }
     .submit-topic {
-        width: 50%;
-        height: 50px;
-        font-size: 20px;
-        border-radius: 10px;
-        border: 1px solid #ccc;
-        padding: 10px;
         margin: 30px;
         background-color: #ccc;
     }
@@ -51,10 +41,10 @@
     }
 </style>
 
+<Nav />
 <h1>Start a New Collection!</h1>
 <div class="new-form">
-    <input type="text" class="new-topic" placeholder="topic name">
-    <input type="file" multiple class="input-images">
-    <button class="submit-topic">Submit</button>
+        <input type="text" class="nt-form new-topic" placeholder="topic name">
+        <input type="file" multiple class="nt-form input-images">
+        <button class="nt-form submit-topic">Submit</button>
 </div>
-

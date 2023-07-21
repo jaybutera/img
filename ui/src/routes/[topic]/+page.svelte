@@ -1,4 +1,5 @@
 <script>
+    import Nav from "../../components/Nav.svelte";
     export let data;
     const imgs = data.images;
     const img_server = "https://img.smdhi.xyz";
@@ -22,6 +23,10 @@
         max-width: 100%;
     }
 </style>
+
+<Nav>
+    <a href="/new">Add Photos</a>
+</Nav>
 
 <div class="grid">
     {#each imgs as name (name)}
