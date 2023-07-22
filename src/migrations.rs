@@ -15,6 +15,8 @@ use async_fs::File;
 use smol::io::{AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
 
+use crate::get_uid;
+
 pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
     // Get all the json files in the root directory
     let mut entries = smol::fs::read_dir(root_dir).await?;
@@ -45,14 +47,18 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
         let mut file = smol::fs::File::open(&path).await?;
         let mut reader = smol::io::BufReader::new(file);
         let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        reader.read_exact(&mut buffer).await?;
-        let uid = blake3::hash(&buffer).to_string();
+        //reader.read_exact(&mut buffer).await?;
+        //let uid = blake3::hash(&buffer).to_string();
+        let (uid, mut buffer) = get_uid(&mut reader).await?;
         let fname = format!("{}.{}", uid, ext);
 
         // Rename the file
         log::info!("Renaming {:?} to {:?}", path, fname);
         let new_path = root_dir.join(&fname);
-        smol::fs::rename(path.clone(), new_path).await?;
+        let old_fname = path.file_name()
+            .expect("old path should have a file name").to_str()
+            .expect("old file name should be a string").to_string();
+        smol::fs::rename(path, new_path).await?;
 
         // Update all json files with the new name
         for json_file in &json_files {
@@ -63,10 +69,7 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
                 serde_json::from_slice(&raw_json)?
             };
 
-            let old_fname = path.file_name()
-                .expect("old path should have a file name").to_str()
-                .expect("old file name should be a string");
-            topic_data.rename(old_fname.to_string(), fname.clone());
+            topic_data.rename(old_fname.clone(), fname.clone());
 
             let raw_json = serde_json::to_vec(&topic_data)?;
             let tmp_file = json_file.with_extension("tmp");

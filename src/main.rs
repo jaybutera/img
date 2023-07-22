@@ -16,7 +16,7 @@ use smol::io::AsyncWriteExt;
 use http_types::headers::HeaderValue;
 use tide::security::{CorsMiddleware, Origin};
 use async_fs::File;
-use smol::io::{AsyncReadExt, BufReader};
+use smol::io::{AsyncRead, AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
 
 use crate::migrations::update_media_names;
@@ -182,16 +182,31 @@ async fn upload_image_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
-/// the file as the uid, and the extension of the file.
-//async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Result<String> {
-async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) -> anyhow::Result<String> {
+/// Uses the buffer to read the first 1MB of the file and hash it to get the uid
+pub async fn get_uid<T>(mut reader: &mut BufReader<T>) -> anyhow::Result<(String, Vec<u8>)>
+where T: AsyncRead + Unpin {
     let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-    // read exactly 1MB
-    reader.read_exact(&mut buffer).await?;
+
+    // read exactly 1MB or the whole buffer
+    let mut n = reader.read(&mut buffer).await?;
+    while n < buffer.len() {
+        let n2 = reader.read(&mut buffer[n..]).await?;
+        if n2 == 0 {
+            break;
+        }
+        n += n2;
+    }
 
     // Hash the first 1MB for the uid
     let uid = blake3::hash(&buffer).to_string();
+
+    Ok((uid, buffer))
+}
+
+/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
+/// the file as the uid, and the extension of the file.
+async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) -> anyhow::Result<String> {
+    let (uid, mut buffer) = get_uid(&mut reader).await?;
 
     // Generate path
     let image_fname = format!("{}.{}", uid, ext);

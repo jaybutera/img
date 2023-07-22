@@ -64,7 +64,7 @@ impl TopicData {
     }
 
     pub fn rename(&mut self, old: MediaUid, new: MediaUid) {
-        if old == new {
+        if old == new || !self.contains(&old) {
             return;
         }
 
