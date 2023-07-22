@@ -56,17 +56,25 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
 
         // Update all json files with the new name
         for json_file in &json_files {
-            let mut file = smol::fs::File::open(json_file).await?;
-            let mut raw_json = vec![];
-            file.read_to_end(&mut raw_json).await?;
-            let mut topic_data: TopicData = serde_json::from_slice(&raw_json)?;
+            let mut topic_data: TopicData = {
+                let mut file = smol::fs::File::open(json_file).await?;
+                let mut raw_json = vec![];
+                file.read_to_end(&mut raw_json).await?;
+                serde_json::from_slice(&raw_json)?
+            };
 
-            let old_fname = path.file_name().unwrap().to_str().unwrap();
+            let old_fname = path.file_name()
+                .expect("old path should have a file name").to_str()
+                .expect("old file name should be a string");
             topic_data.rename(old_fname.to_string(), fname.clone());
 
             let raw_json = serde_json::to_vec(&topic_data)?;
-            let mut file = smol::fs::File::create(json_file).await?;
+            let tmp_file = json_file.with_extension("tmp");
+
+            let mut file = smol::fs::File::create(&tmp_file).await?;
             file.write_all(&raw_json).await?;
+
+            smol::fs::rename(tmp_file, json_file).await?;
         }
     }
 
