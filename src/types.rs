@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use askama::Template;
 use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
+use tide::log;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct HashVal([u8; 32]);
@@ -58,7 +59,17 @@ pub struct TopicData {
 
 impl TopicData {
     pub fn contains(&self, media: &MediaUid) -> bool {
+        // debug display the list
         self.list().contains(media)
+    }
+
+    pub fn rename(&mut self, old: MediaUid, new: MediaUid) {
+        if old == new {
+            return;
+        }
+
+        self.rm(vec![old]);
+        self.add(vec![new]);
     }
 
     pub fn add(&mut self, media: Vec<MediaUid>) {
@@ -71,7 +82,6 @@ impl TopicData {
     pub fn rm(&mut self, media: Vec<MediaUid>) {
         // First remove any media that is already in the list
         let mut media = media;
-        media.retain(|x| !self.list().contains(x));
         self.revs.push(RevisionOp::Del(media));
     }
 

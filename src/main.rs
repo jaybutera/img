@@ -1,4 +1,5 @@
 mod types;
+mod migrations;
 
 use types::{Index, TopicData, MediaUid};
 use anyhow::anyhow;
@@ -18,6 +19,8 @@ use async_fs::File;
 use smol::io::{AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
 
+use crate::migrations::update_media_names;
+
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
 }
@@ -28,15 +31,15 @@ fn normalize_topic(topic: &str) -> String {
 
 async fn main_async() -> tide::Result<()> {
     let args = types::Args::from_args();
+    log::start();
 
     // If migrate is true, run migrate function instead of starting server
     if args.migrate {
-        migrate(&args.root_dir).await?;
+        update_media_names(&args.root_dir).await?;
         return Ok(());
     }
 
     let port = args.port;
-    log::start();
 
     let mut app = tide::with_state(args);
     let cors = CorsMiddleware::new()
@@ -179,48 +182,16 @@ async fn upload_image_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-async fn migrate(root_dir: &PathBuf) -> anyhow::Result<()> {
-    // Loop over every image and video file in the root directory
-    let mut entries = smol::fs::read_dir(root_dir).await?;
-    // Change the name of the file to the hash of the first 1MB of the file
-    while let Some(entry) = entries.try_next().await? {
-        // Filter to extensions mp4, jpg, jpeg, png
-        let path = entry.path();
-        // If no extension, skip
-        let ext = path.extension()
-            .map(|ext| ext.to_str().unwrap())
-            .unwrap_or_default();
-
-        if ext != "mp4" && ext != "jpg" && ext != "jpeg" && ext != "png" {
-            continue;
-        }
-
-        let mut file = smol::fs::File::open(&path).await?;
-        let mut reader = smol::io::BufReader::new(file);
-        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        let bytes_read = reader.read(&mut buffer).await?;
-        let chunk = &buffer[..bytes_read];
-        let uid = blake3::hash(chunk).to_string();
-        let fname = format!("{}.{}", uid, ext);
-
-        // Rename the file
-        let new_path = root_dir.join(&fname);
-        smol::fs::rename(path, new_path).await?;
-    }
-
-    Ok(())
-}
-
 /// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
 /// the file as the uid, and the extension of the file.
 //async fn save_media(mut req: Request<Args>, root_dir: &PathBuf) -> anyhow::Result<String> {
 async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) -> anyhow::Result<String> {
     let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-    let bytes_read = reader.read(&mut buffer).await?;
-    let chunk = &buffer[..bytes_read];
+    // read exactly 1MB
+    reader.read_exact(&mut buffer).await?;
 
     // Hash the first 1MB for the uid
-    let uid = blake3::hash(chunk).to_string();
+    let uid = blake3::hash(&buffer).to_string();
 
     // Generate path
     let image_fname = format!("{}.{}", uid, ext);
@@ -231,7 +202,7 @@ async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) 
         let mut image_file = File::create(&image_path).await?;
 
         // Write the first chunk
-        image_file.write_all(chunk).await?;
+        image_file.write_all(&buffer).await?;
         image_file.flush().await?;
 
         // Loop the rest
