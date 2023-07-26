@@ -59,7 +59,8 @@ async fn main_async() -> tide::Result<()> {
     //app.at("/:topic/raw").get(get_topic_images);
     app.at("/:topic").get(images_page);
     app.at("/:topic/images").get(get_image_list);
-    app.at("/img/:name").get(get_image);
+    app.at("/thumbnail/:name").get(get_image_thumbnail);
+    app.at("/img/:name").get(get_image_full);
     app.listen(format!("0.0.0.0:{}", port)).await?;
 
     Ok(())
@@ -111,17 +112,11 @@ async fn new_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-async fn get_image(req: Request<Args>) -> tide::Result {
+async fn get_image_full(req: Request<Args>) -> tide::Result {
     let name = req.param("name")?;
     let mut path = req.state().root_dir.clone();
     path.push(name);
-
-    let ext = path.extension()
-        .expect(&format!("Expected path {:?} to be a file but it has no extension", path))
-        .to_str().unwrap();
-    let mime = from_extension(ext)
-        .expect(&format!("Unsupported filetype {:?} is somehow being fetched", ext));
-    let image = smol::fs::read(path).await?;
+    let (image, mime) = get_image(&path).await?;
 
     let res = Response::builder(200)
         .body(image)
@@ -130,6 +125,33 @@ async fn get_image(req: Request<Args>) -> tide::Result {
         .build();
 
     Ok(res)
+}
+
+async fn get_image_thumbnail(req: Request<Args>) -> tide::Result {
+    let name = req.param("name")?;
+    let mut path = req.state().root_dir.clone();
+    // Use the thumbnail
+    path.push("thumbnails");
+    path.push(name);
+    let (image, mime) = get_image(&path).await?;
+
+    let res = Response::builder(200)
+        .body(image)
+        .header(tide::http::headers::ACCEPT_RANGES, "bytes")
+        .content_type(mime)
+        .build();
+
+    Ok(res)
+}
+
+async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Error> {
+    let ext = path.extension()
+        .expect(&format!("Expected path {:?} to be a file but it has no extension", path))
+        .to_str().unwrap();
+    let mime = from_extension(ext)
+        .expect(&format!("Unsupported filetype {:?} is somehow being fetched", ext));
+    let image = smol::fs::read(path).await?;
+    Ok((image, mime))
 }
 
 async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {

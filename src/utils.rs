@@ -4,7 +4,7 @@ use blocking::unblock;
 use smol::stream::StreamExt;
 use crate::types::TopicData;
 use smol::io::{AsyncReadExt, BufReader};
-use image::imageops::FilterType;
+use image::{io::Reader, imageops::FilterType};
 
 /// Get all topic file paths in the root directory
 pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
@@ -60,8 +60,8 @@ pub async fn save_thumbnail(
         let thumbnail_result = smol::unblock(move || {
             let img = image::open(&media_file)?;
 
-            let thumbnail = img.resize(
-                thumbnail_max_size, thumbnail_max_size, FilterType::Nearest);
+            let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size)
+                .rotate180();
 
             let mut output_path = thumbnail_dir;
             output_path.push(media_file.file_name().unwrap());
