@@ -35,7 +35,6 @@ pub async fn serialize_topics(topics: &Vec<PathBuf>) -> Result<Vec<TopicData>> {
     Ok(topic_data)
 }
 
-/*
 /// Get paths of all the media files in the root directory
 pub async fn get_media_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
     let mut entries = smol::fs::read_dir(root_dir).await?;
@@ -51,7 +50,6 @@ pub async fn get_media_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
 
     Ok(media_files)
 }
-*/
 
 pub async fn save_thumbnail(
     media_file: PathBuf,

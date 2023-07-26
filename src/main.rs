@@ -20,7 +20,7 @@ use async_fs::File;
 use smol::io::{AsyncRead, AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
 
-use crate::migrations::update_media_names;
+use crate::migrations::generate_thumbnails;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -36,7 +36,8 @@ async fn main_async() -> tide::Result<()> {
 
     // If migrate is true, run migrate function instead of starting server
     if args.migrate {
-        update_media_names(&args.root_dir).await?;
+        generate_thumbnails(&args.root_dir).await?;
+        //update_media_names(&args.root_dir).await?;
         return Ok(());
     }
 
