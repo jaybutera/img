@@ -1,5 +1,6 @@
 mod types;
 mod migrations;
+mod utils;
 
 use types::{Index, TopicData, MediaUid};
 use anyhow::anyhow;

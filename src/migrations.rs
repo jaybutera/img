@@ -2,7 +2,6 @@ use crate::types::{Args, Index, TopicData, MediaUid};
 use anyhow::anyhow;
 use std::fmt::Debug;
 use std::str::FromStr;
-use askama::Template;
 use http_types::mime::{self, Mime};
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -16,17 +15,10 @@ use smol::io::{AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
 
 use crate::get_uid;
+use crate::utils::{get_topic_ids, serialize_topics, get_media_paths};
 
 pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
-    // Get all the json files in the root directory
-    let mut entries = smol::fs::read_dir(root_dir).await?;
-    let mut json_files = vec![];
-    while let Some(entry) = entries.try_next().await? {
-        let path = entry.path();
-        if path.extension().map(|ext| ext == "json").unwrap_or(false) {
-            json_files.push(path);
-        }
-    }
+    let json_files = get_topic_ids(root_dir).await?;
     log::info!("Found {} json files", json_files.len());
 
     // Change the name of the file to the hash of the first 1MB of the file
@@ -47,8 +39,6 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
         let mut file = smol::fs::File::open(&path).await?;
         let mut reader = smol::io::BufReader::new(file);
         let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        //reader.read_exact(&mut buffer).await?;
-        //let uid = blake3::hash(&buffer).to_string();
         let (uid, mut buffer) = get_uid(&mut reader).await?;
         let fname = format!("{}.{}", uid, ext);
 
@@ -61,15 +51,9 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
         smol::fs::rename(path, new_path).await?;
 
         // Update all json files with the new name
-        for json_file in &json_files {
-            let mut topic_data: TopicData = {
-                let mut file = smol::fs::File::open(json_file).await?;
-                let mut raw_json = vec![];
-                file.read_to_end(&mut raw_json).await?;
-                serde_json::from_slice(&raw_json)?
-            };
-
+        for mut topic_data in serialize_topics(&json_files).await? {
             topic_data.rename(old_fname.clone(), fname.clone());
+            let json_file = root_dir.join(&topic_data.name).with_extension("json");
 
             let raw_json = serde_json::to_vec(&topic_data)?;
             let tmp_file = json_file.with_extension("tmp");
@@ -79,6 +63,42 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
 
             smol::fs::rename(tmp_file, json_file).await?;
         }
+    }
+
+    Ok(())
+}
+
+/// Generate thumbnails for all images in the root directory
+pub async fn generate_thumbnails(root_dir: &PathBuf) -> anyhow::Result<()> {
+    let media_files = get_media_paths(root_dir).await?;
+    log::info!("Found {} media files", media_files.len());
+
+    // Save in thumbnail directory
+    let thumbnail_dir = root_dir.join("thumbnails");
+    smol::fs::create_dir_all(&thumbnail_dir).await?;
+
+    // Generate thumbnails for all images
+    let mut tasks = vec![];
+    for media_file in media_files {
+        let thumbnail_dir = thumbnail_dir.clone();
+        let task = smol::spawn(async move {
+            let thumbnail_result = blocking!({
+                let img = image::open(&media_file)?;
+
+                let thumbnail = img.resize(400, 400, FilterType::Nearest);
+
+                let mut output_path = thumbnail_dir;
+                output_path.push(media_file.file_name().unwrap());
+
+                thumbnail.save(output_path)
+            });
+            thumbnail_result
+        });
+        tasks.push(task);
+    }
+
+    for task in tasks {
+        task.await??;
     }
 
     Ok(())
