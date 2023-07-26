@@ -1,8 +1,10 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use blocking::unblock;
 use smol::stream::StreamExt;
 use crate::types::TopicData;
 use smol::io::{AsyncReadExt, BufReader};
+use image::imageops::FilterType;
 
 /// Get all topic file paths in the root directory
 pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
@@ -33,6 +35,7 @@ pub async fn serialize_topics(topics: &Vec<PathBuf>) -> Result<Vec<TopicData>> {
     Ok(topic_data)
 }
 
+/*
 /// Get paths of all the media files in the root directory
 pub async fn get_media_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
     let mut entries = smol::fs::read_dir(root_dir).await?;
@@ -48,5 +51,26 @@ pub async fn get_media_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
 
     Ok(media_files)
 }
+*/
 
-pub async fn save_thumbnail(image: PathBuf) -> Result<()> {
+pub async fn save_thumbnail(
+    media_file: PathBuf,
+    thumbnail_dir: PathBuf,
+    thumbnail_max_size: u32,
+) -> anyhow::Result<()> {
+    smol::spawn(async move {
+        let thumbnail_result = smol::unblock(move || {
+            let img = image::open(&media_file)?;
+
+            let thumbnail = img.resize(
+                thumbnail_max_size, thumbnail_max_size, FilterType::Nearest);
+
+            let mut output_path = thumbnail_dir;
+            output_path.push(media_file.file_name().unwrap());
+
+            thumbnail.save(output_path)
+        });
+        thumbnail_result
+    }).await.await
+    .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
+}

@@ -72,6 +72,7 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
 pub async fn generate_thumbnails(root_dir: &PathBuf) -> anyhow::Result<()> {
     let media_files = get_media_paths(root_dir).await?;
     log::info!("Found {} media files", media_files.len());
+    let thumbnail_max_size = 500;
 
     // Save in thumbnail directory
     let thumbnail_dir = root_dir.join("thumbnails");
@@ -80,25 +81,12 @@ pub async fn generate_thumbnails(root_dir: &PathBuf) -> anyhow::Result<()> {
     // Generate thumbnails for all images
     let mut tasks = vec![];
     for media_file in media_files {
-        let thumbnail_dir = thumbnail_dir.clone();
-        let task = smol::spawn(async move {
-            let thumbnail_result = blocking!({
-                let img = image::open(&media_file)?;
-
-                let thumbnail = img.resize(400, 400, FilterType::Nearest);
-
-                let mut output_path = thumbnail_dir;
-                output_path.push(media_file.file_name().unwrap());
-
-                thumbnail.save(output_path)
-            });
-            thumbnail_result
-        });
+        let task = crate::utils::save_thumbnail(media_file, thumbnail_dir.clone(), thumbnail_max_size);
         tasks.push(task);
     }
 
     for task in tasks {
-        task.await??;
+        task.await?;
     }
 
     Ok(())
