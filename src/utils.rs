@@ -5,6 +5,7 @@ use smol::stream::StreamExt;
 use crate::types::TopicData;
 use smol::io::{AsyncReadExt, BufReader};
 use image::{io::Reader, imageops::FilterType};
+use tide::log;
 
 /// Get all topic file paths in the root directory
 pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
@@ -56,19 +57,18 @@ pub async fn save_thumbnail(
     thumbnail_dir: PathBuf,
     thumbnail_max_size: u32,
 ) -> anyhow::Result<()> {
-    smol::spawn(async move {
-        let thumbnail_result = smol::unblock(move || {
-            let img = image::open(&media_file)?;
+    smol::unblock(move || {
+        log::info!("Attempting to save thumbnail for {:?}", media_file);
+        let img = image::open(&media_file)?;
+        log::info!("Saving thumbnail for {:?}", media_file);
 
-            let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size)
-                .rotate180();
+        let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
+            //.rotate180();
 
-            let mut output_path = thumbnail_dir;
-            output_path.push(media_file.file_name().unwrap());
+        let mut output_path = thumbnail_dir;
+        output_path.push(media_file.file_name().unwrap());
 
-            thumbnail.save(output_path)
-        });
-        thumbnail_result
-    }).await.await
+        thumbnail.save(output_path)
+    }).await
     .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
 }

@@ -2,9 +2,8 @@ mod types;
 mod migrations;
 mod utils;
 
-use types::{Index, TopicData, MediaUid};
+use types::{ServerState, Index, TopicData, MediaUid};
 use anyhow::anyhow;
-use types::Args;
 use std::fmt::Debug;
 use std::str::FromStr;
 use askama::Template;
@@ -19,8 +18,10 @@ use tide::security::{CorsMiddleware, Origin};
 use async_fs::File;
 use smol::io::{AsyncRead, AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
+//use async_channel::{TryRecvError};
 
 use crate::migrations::generate_thumbnails;
+use crate::utils::save_thumbnail;
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -43,7 +44,32 @@ async fn main_async() -> tide::Result<()> {
 
     let port = args.port;
 
-    let mut app = tide::with_state(args);
+    // Concurrently maintain a queue of thumbnails to generate,
+    // at most N at a time
+    let mut thumbnail_queue = async_channel::unbounded::<PathBuf>();
+    let mut thumbnail_queue_sender = thumbnail_queue.0.clone();
+    let mut thumbnail_queue_receiver = thumbnail_queue.1.clone();
+
+    let mut thumbnail_path = args.root_dir.clone();
+    thumbnail_path.push("thumbnails");
+
+    smol::spawn(async move {
+        while let Some(path) = thumbnail_queue_receiver.next().await {
+            let max_thumbnail_size = 500;
+            let thumbnail = save_thumbnail(
+                path.clone(), thumbnail_path.clone(),
+                max_thumbnail_size)
+                .await.expect("Failed to generate thumbnail");
+        }
+    }).detach();
+
+
+    let state = ServerState {
+        args: args.clone(),
+        thumbnail_sender: thumbnail_queue_sender,
+    };
+
+    let mut app = tide::with_state(state);
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
         .allow_origin(Origin::from("*"))
@@ -66,9 +92,9 @@ async fn main_async() -> tide::Result<()> {
     Ok(())
 }
 
-async fn get_index(req: Request<Args>) -> tide::Result {
+async fn get_index(req: Request<ServerState>) -> tide::Result {
     let name = req.param("name")?;
-    let mut path = req.state().root_dir.clone();
+    let mut path = req.state().args.root_dir.clone();
     path.push(format!("{}.json", name));
 
     let index = smol::fs::read_to_string(path).await?;
@@ -82,10 +108,10 @@ async fn get_index(req: Request<Args>) -> tide::Result {
 }
 
 /// Request contains a json file for the index which is saved into /indexes/<name>.json
-async fn create_index(mut req: Request<Args>) -> tide::Result {
+async fn create_index(mut req: Request<ServerState>) -> tide::Result {
     let index: Index = req.body_json().await?;
     let name = normalize_topic(&index.name);
-    let mut path = req.state().root_dir.clone();
+    let mut path = req.state().args.root_dir.clone();
     path.push(format!("{}.json", name));
 
     if path.exists() {
@@ -101,7 +127,7 @@ async fn create_index(mut req: Request<Args>) -> tide::Result {
 
 }
 
-async fn new_page(req: Request<Args>) -> tide::Result {
+async fn new_page(req: Request<ServerState>) -> tide::Result {
     let page = types::NewTopicTemplate {};
 
     let res = Response::builder(200)
@@ -112,9 +138,9 @@ async fn new_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-async fn get_image_full(req: Request<Args>) -> tide::Result {
+async fn get_image_full(req: Request<ServerState>) -> tide::Result {
     let name = req.param("name")?;
-    let mut path = req.state().root_dir.clone();
+    let mut path = req.state().args.root_dir.clone();
     path.push(name);
     let (image, mime) = get_image(&path).await?;
 
@@ -127,9 +153,9 @@ async fn get_image_full(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-async fn get_image_thumbnail(req: Request<Args>) -> tide::Result {
+async fn get_image_thumbnail(req: Request<ServerState>) -> tide::Result {
     let name = req.param("name")?;
-    let mut path = req.state().root_dir.clone();
+    let mut path = req.state().args.root_dir.clone();
     // Use the thumbnail
     path.push("thumbnails");
     path.push(name);
@@ -154,9 +180,9 @@ async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Err
     Ok((image, mime))
 }
 
-async fn get_image_list(req: Request<Args>) -> tide::Result<Body> {
+async fn get_image_list(req: Request<ServerState>) -> tide::Result<Body> {
     let topic = normalize_topic(req.param("topic")?);
-    let mut path = req.state().root_dir.clone();
+    let mut path = req.state().args.root_dir.clone();
     path.push(format!("{}.json", topic));
 
     let image_list = image_list(path).await?;
@@ -173,9 +199,9 @@ async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
     Ok(image_names)
 }
 
-async fn images_page(req: Request<Args>) -> tide::Result {
+async fn images_page(req: Request<ServerState>) -> tide::Result {
     let topic = normalize_topic(req.param("topic")?);
-    let mut path = req.state().root_dir.clone();
+    let mut path = req.state().args.root_dir.clone();
     path.push(format!("{}.json", topic.clone()));
 
     let image_names = image_list(path).await?;
@@ -192,7 +218,7 @@ async fn images_page(req: Request<Args>) -> tide::Result {
     Ok(res)
 }
 
-async fn upload_image_page(req: Request<Args>) -> tide::Result {
+async fn upload_image_page(req: Request<ServerState>) -> tide::Result {
     let topic = normalize_topic(req.param("topic")?);
     let page = types::UploadTemplate {
         topic: topic.into()
@@ -207,7 +233,7 @@ async fn upload_image_page(req: Request<Args>) -> tide::Result {
 }
 
 /// Uses the buffer to read the first 1MB of the file and hash it to get the uid
-pub async fn get_uid<T>(mut reader: &mut BufReader<T>) -> anyhow::Result<(String, Vec<u8>)>
+pub async fn get_uid<T>(reader: &mut BufReader<T>) -> anyhow::Result<(String, Vec<u8>)>
 where T: AsyncRead + Unpin {
     let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
 
@@ -229,7 +255,12 @@ where T: AsyncRead + Unpin {
 
 /// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
 /// the file as the uid, and the extension of the file.
-async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) -> anyhow::Result<String> {
+async fn save_media(
+    mut reader: BufReader<Body>,
+    root_dir: &PathBuf,
+    ext: &str,
+    thumbnail_sender: smol::channel::Sender<PathBuf>,
+) -> anyhow::Result<String> {
     let (uid, mut buffer) = get_uid(&mut reader).await?;
 
     // Generate path
@@ -254,12 +285,15 @@ async fn save_media(mut reader: BufReader<Body>, root_dir: &PathBuf, ext: &str) 
             image_file.write_all(chunk).await?;
             image_file.flush().await?;
         }
+
+        // Save thumbnail
+        thumbnail_sender.send(image_path.clone()).await?;
     }
 
     Ok(image_fname)
 }
 
-async fn upload_image(mut req: Request<Args>) -> tide::Result {
+async fn upload_image(mut req: Request<ServerState>) -> tide::Result {
     let mime = req.content_type().ok_or(anyhow!("No content type"))?;
 
     // Invalid content type
@@ -270,13 +304,17 @@ async fn upload_image(mut req: Request<Args>) -> tide::Result {
 
     // Topic path
     let topic = normalize_topic(req.param("topic")?);
-    let mut topic_path = req.state().root_dir.clone();
+    let mut topic_path = req.state().args.root_dir.clone();
     topic_path.push(format!("{}.json", topic));
 
     // Add the image if its not already in the root dir
-    let mut reader = smol::io::BufReader::new(req.take_body());
-    let mut root_dir = req.state().root_dir.clone();
-    let image_fname = save_media(reader, &root_dir, mime.subtype()).await?;
+    let reader = smol::io::BufReader::new(req.take_body());
+    let root_dir = req.state().args.root_dir.clone();
+    let image_fname = save_media(
+        reader,
+        &root_dir,
+        mime.subtype(),
+        req.state().thumbnail_sender.clone()).await?;
 
     // Create topic file if not already created
     if !topic_path.exists() {

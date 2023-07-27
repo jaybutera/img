@@ -35,6 +35,12 @@ pub struct TopicTemplate {
 #[template(path = "new.html")]
 pub struct NewTopicTemplate {}
 
+#[derive(Clone)]
+pub struct ServerState {
+    pub args: Args,
+    pub thumbnail_sender: smol::channel::Sender<PathBuf>,
+}
+
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "sangha")]
 pub struct Args {
