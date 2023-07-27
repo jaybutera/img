@@ -81,6 +81,14 @@ pub async fn generate_thumbnails(root_dir: &PathBuf) -> anyhow::Result<()> {
     // Generate thumbnails for all images
     let mut tasks = vec![];
     for media_file in media_files {
+        // Skip if file is not an image
+        let ext = media_file.extension()
+            .map(|ext| ext.to_str().unwrap())
+            .unwrap_or_default();
+        if ext != "jpg" && ext != "jpeg" && ext != "png" {
+            continue;
+        }
+
         let task = crate::utils::save_thumbnail(media_file, thumbnail_dir.clone(), thumbnail_max_size);
         tasks.push(task);
     }

@@ -58,9 +58,7 @@ pub async fn save_thumbnail(
     thumbnail_max_size: u32,
 ) -> anyhow::Result<()> {
     smol::unblock(move || {
-        log::info!("Attempting to save thumbnail for {:?}", media_file);
         let img = image::open(&media_file)?;
-        log::info!("Saving thumbnail for {:?}", media_file);
 
         let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
             //.rotate180();
