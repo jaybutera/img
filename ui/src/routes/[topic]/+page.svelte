@@ -1,9 +1,10 @@
 <script>
     import Nav from "../../components/Nav.svelte";
+    import { img_server } from "$lib/img.ts";
     export let data;
     const imgs = data.images;
     //const img_server = "https://img.smdhi.xyz";
-    const img_server = "http://localhost:2342";
+    //const img_server = "http://localhost:2342";
 </script>
 
 <style>

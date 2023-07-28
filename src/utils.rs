@@ -52,6 +52,7 @@ pub async fn get_media_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
     Ok(media_files)
 }
 
+/*
 pub async fn save_thumbnail(
     media_file: PathBuf,
     thumbnail_dir: PathBuf,
@@ -60,7 +61,7 @@ pub async fn save_thumbnail(
     smol::unblock(move || {
         let img = image::open(&media_file)?;
 
-        let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
+        let thumbnail: i32 = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
             //.rotate180();
 
         let mut output_path = thumbnail_dir;
@@ -70,3 +71,36 @@ pub async fn save_thumbnail(
     }).await
     .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
 }
+*/
+pub async fn save_thumbnail(
+    media_file: PathBuf,
+    thumbnail_dir: PathBuf,
+    thumbnail_max_size: u32,
+) -> anyhow::Result<()> {
+    smol::unblock(move || {
+        let img = image::open(&media_file)?;
+
+        let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
+
+        let mut output_path = thumbnail_dir;
+        output_path.push(media_file.file_name().unwrap());
+
+        // Save thumbnail to a temporary file
+        //let temp_output_path = output_path.with_extension("temp.jpg");
+        thumbnail.save(&output_path)?;
+
+        // Load EXIF data from original image
+        let metadata = rexiv2::Metadata::new_from_path(&media_file)?;
+        
+        // Load the temporary thumbnail image and apply the metadata
+        let mut output_metadata = rexiv2::Metadata::new_from_path(&output_path)?;
+        output_metadata.set_orientation(metadata.get_orientation());
+        output_metadata.save_to_file(&output_path)
+            .map_err(|e| anyhow::anyhow!("Error saving thumbnail metadata: {:?}", e))
+
+        // Rename the temp thumbnail to the final thumbnail path
+        //std::fs::rename(temp_output_path, &output_path)?;
+    }).await
+    .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
+}
+
