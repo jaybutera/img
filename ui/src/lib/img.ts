@@ -1,6 +1,6 @@
 // Img server address
 //export const img_server: string = "http://localhost:2342";
-export const img_server: string = "https://img.smdhi.xyz";
+export const img_server: string = "https://img.smdhi.xyz:8080";
 
 export async function get_image_names(topic: string): Promise<string[]> {
   try {

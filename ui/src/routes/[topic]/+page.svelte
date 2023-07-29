@@ -58,7 +58,7 @@
 </style>
 
 <Nav>
-    <a href="/new">Add Photos</a>
+    <!--<a href="/new">Add Photos</a>-->
     <!-- Hidden input for file upload -->
     <input type='file' id='file' on:change={handleFileUpload} multiple style='display: none;' />
     <!-- Visible button that triggers the hidden input -->
