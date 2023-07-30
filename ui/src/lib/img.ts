@@ -20,3 +20,21 @@ export async function get_image_names(topic: string): Promise<string[]> {
     return [];
   }
 }
+
+export async function handle_file_upload(topic: string, files) {
+    // Wait for all files to upload
+    let filePromises = Array.from(files)
+        .map((file) => processFile(topic, file));
+    await Promise.all(filePromises);
+}
+
+async function processFile(topic: string, file) {
+    let response = await fetch(`${img_server}/${topic}/new-image`, {
+      method: 'POST',
+      body: file,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Error in upload: ${response.statusText}`);
+    }
+}

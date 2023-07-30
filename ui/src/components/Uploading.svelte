@@ -1,4 +1,11 @@
 <style>
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;  /* 100% of the viewport height */
+}
+
 .loading {
   border: 5px solid #f3f3f3;
   border-top: 5px solid #3498db;
@@ -14,4 +21,7 @@
 }
 </style>
 
-<div class="loading"></div>
+<div class="container">
+  <div class="loading"></div>
+</div>
+

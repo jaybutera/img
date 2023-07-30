@@ -1,30 +1,20 @@
 <script>
     import Nav from "../../components/Nav.svelte";
-    import { img_server } from "$lib/img.ts";
+    import { img_server, handle_file_upload } from "$lib/img.ts";
     import { goto } from "$app/navigation";
+    import Uploading from '../../components/Uploading.svelte';
     export let data;
     const imgs = data.images;
     const topic = data.topic;
+    let not_uploading = true;
+    let selected_files;
 
-    async function handleFileUpload(event) {
-        let files = event.target.files;
-      
-        // Wait for all files to upload
-        let filePromises = Array.from(files).map(processFile);
-        await Promise.all(filePromises);
-
-        goto(`/${topic}`);
-    }
-
-    async function processFile(file) {
-        let response = await fetch(`${img_server}/${topic}/new-image`, {
-          method: 'POST',
-          body: file,
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Error in upload: ${response.statusText}`);
-        }
+    async function upload_file(event) {
+        let task = handle_file_upload(topic, selected_files);
+        not_uploading = false;
+        await task;
+        not_uploading = true;
+        window.location.reload();
     }
 </script>
 
@@ -60,11 +50,12 @@
 <Nav>
     <!--<a href="/new">Add Photos</a>-->
     <!-- Hidden input for file upload -->
-    <input type='file' id='file' on:change={handleFileUpload} multiple style='display: none;' />
+    <input bind:files={selected_files} type='file' id='file' on:change={upload_file} multiple style='display: none;' />
     <!-- Visible button that triggers the hidden input -->
     <button on:click={() => document.getElementById('file').click()}>Upload File</button>
 </Nav>
 
+{#if not_uploading}
 <div class="grid">
     {#each imgs as name (name)}
         {#if name.endsWith(".mp4")}
@@ -82,3 +73,6 @@
         {/if}
     {/each}
 </div>
+{:else}
+    <Uploading />
+{/if}

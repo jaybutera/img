@@ -52,26 +52,6 @@ pub async fn get_media_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
     Ok(media_files)
 }
 
-/*
-pub async fn save_thumbnail(
-    media_file: PathBuf,
-    thumbnail_dir: PathBuf,
-    thumbnail_max_size: u32,
-) -> anyhow::Result<()> {
-    smol::unblock(move || {
-        let img = image::open(&media_file)?;
-
-        let thumbnail: i32 = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
-            //.rotate180();
-
-        let mut output_path = thumbnail_dir;
-        output_path.push(media_file.file_name().unwrap());
-
-        thumbnail.save(output_path)
-    }).await
-    .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
-}
-*/
 pub async fn save_thumbnail(
     media_file: PathBuf,
     thumbnail_dir: PathBuf,
@@ -103,4 +83,3 @@ pub async fn save_thumbnail(
     }).await
     .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
 }
-
