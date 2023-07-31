@@ -6,7 +6,6 @@ use types::{ServerState, Index, TopicData, MediaUid};
 use anyhow::anyhow;
 use std::fmt::Debug;
 use std::str::FromStr;
-use askama::Template;
 use http_types::mime::{self, Mime};
 use std::path::PathBuf;
 use structopt::StructOpt;
