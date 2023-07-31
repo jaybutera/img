@@ -79,14 +79,9 @@ async fn main_async() -> tide::Result<()> {
         .allow_credentials(false);
     app.with(cors);
 
-    app.at("/").get(new_page);
-    app.at("/new").get(new_page);
-    app.at("/:topic/new").get(upload_image_page);
     app.at("/new-index").post(create_index);
     app.at("/index/:name").get(get_index);
     app.at("/:topic/new-image").post(upload_image);
-    //app.at("/:topic/raw").get(get_topic_images);
-    app.at("/:topic").get(images_page);
     app.at("/:topic/images").get(get_image_list);
     app.at("/thumbnail/:name").get(get_image_thumbnail);
     app.at("/img/:name").get(get_image_full);
@@ -96,7 +91,7 @@ async fn main_async() -> tide::Result<()> {
 }
 
 async fn get_index(req: Request<ServerState>) -> tide::Result {
-    let name = req.param("name")?;
+    let name = normalize_topic(req.param("name"))?;
     let mut path = req.state().args.root_dir.clone();
     path.push(format!("{}.json", name));
 
@@ -128,17 +123,6 @@ async fn create_index(mut req: Request<ServerState>) -> tide::Result {
 
     Ok(Response::new(StatusCode::Ok))
 
-}
-
-async fn new_page(req: Request<ServerState>) -> tide::Result {
-    let page = types::NewTopicTemplate {};
-
-    let res = Response::builder(200)
-        .body(page.render().unwrap())
-        .content_type(mime::HTML)
-        .build();
-
-    Ok(res)
 }
 
 async fn get_image_full(req: Request<ServerState>) -> tide::Result {
@@ -200,39 +184,6 @@ async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
     let image_names = topic_data.list();
 
     Ok(image_names)
-}
-
-async fn images_page(req: Request<ServerState>) -> tide::Result {
-    let topic = normalize_topic(req.param("topic")?);
-    let mut path = req.state().args.root_dir.clone();
-    path.push(format!("{}.json", topic.clone()));
-
-    let image_names = image_list(path).await?;
-    let page = types::TopicTemplate {
-        image_names,
-        topic: topic.into()
-    };
-
-    let res = Response::builder(200)
-        .body(page.render().unwrap())
-        .content_type(mime::HTML)
-        .build();
-
-    Ok(res)
-}
-
-async fn upload_image_page(req: Request<ServerState>) -> tide::Result {
-    let topic = normalize_topic(req.param("topic")?);
-    let page = types::UploadTemplate {
-        topic: topic.into()
-    };
-
-    let res = Response::builder(200)
-        .body(page.render().unwrap())
-        .content_type(mime::HTML)
-        .build();
-
-    Ok(res)
 }
 
 /// Uses the buffer to read the first 1MB of the file and hash it to get the uid
