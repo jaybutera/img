@@ -28,7 +28,11 @@ fn main() -> tide::Result<()> {
 }
 
 fn normalize_topic(topic: &str) -> String {
-    topic.to_lowercase().replace(" ", "-").replace(".", "_").trim().to_string()
+    topic.to_lowercase()
+        .replace(" ", "-")
+        .replace("%20", "-")
+        .replace(".", "_")
+        .trim().to_string()
 }
 
 async fn main_async() -> tide::Result<()> {
