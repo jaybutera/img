@@ -88,6 +88,11 @@ pub async fn generate_thumbnails(root_dir: &PathBuf) -> anyhow::Result<()> {
         if ext != "jpg" && ext != "jpeg" && ext != "png" {
             continue;
         }
+        // Skip if thumbnail already exists
+        let thumbnail_file = thumbnail_dir.join(media_file.file_name().expect("media file name should exist"));
+        if thumbnail_file.exists() {
+            continue;
+        }
 
         let task = crate::utils::save_thumbnail(media_file, thumbnail_dir.clone(), thumbnail_max_size);
         tasks.push(task);
