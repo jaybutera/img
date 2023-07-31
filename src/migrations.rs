@@ -94,7 +94,9 @@ pub async fn generate_thumbnails(root_dir: &PathBuf) -> anyhow::Result<()> {
     }
 
     for task in tasks {
-        task.await?;
+        if let Err(e) = task.await {
+            log::error!("Failed to generate thumbnail: {}", e);
+        }
     }
 
     Ok(())

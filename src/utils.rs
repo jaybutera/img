@@ -57,13 +57,14 @@ pub async fn save_thumbnail(
     thumbnail_dir: PathBuf,
     thumbnail_max_size: u32,
 ) -> anyhow::Result<()> {
+    let media_file1 = media_file.clone();
     smol::unblock(move || {
         let img = image::open(&media_file)?;
 
         let thumbnail = img.thumbnail(thumbnail_max_size, thumbnail_max_size);
 
         let mut output_path = thumbnail_dir;
-        output_path.push(media_file.file_name().unwrap());
+        output_path.push(media_file.file_name().expect("Should be a filename when saving thumbnail"));
 
         // Save thumbnail to a temporary file
         //let temp_output_path = output_path.with_extension("temp.jpg");
@@ -81,5 +82,5 @@ pub async fn save_thumbnail(
         // Rename the temp thumbnail to the final thumbnail path
         //std::fs::rename(temp_output_path, &output_path)?;
     }).await
-    .map_err(|e| anyhow::anyhow!("Error saving thumbnail: {:?}", e))
+    .map_err(|e| anyhow::anyhow!("Error saving thumbnail [{media_file1:?}]: {:?}", e))
 }
