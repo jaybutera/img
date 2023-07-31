@@ -95,7 +95,7 @@ async fn main_async() -> tide::Result<()> {
 }
 
 async fn get_index(req: Request<ServerState>) -> tide::Result {
-    let name = normalize_topic(req.param("name"))?;
+    let name = normalize_topic(req.param("name")?);
     let mut path = req.state().args.root_dir.clone();
     path.push(format!("{}.json", name));
 

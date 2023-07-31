@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use askama::Template;
 use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use tide::log;
@@ -17,23 +16,6 @@ impl std::fmt::Display for HashVal {
     }
 }
 */
-
-#[derive(Template)]
-#[template(path = "upload.html")]
-pub struct UploadTemplate {
-    pub topic: String,
-}
-
-#[derive(Template)]
-#[template(path = "topic.html")]
-pub struct TopicTemplate {
-    pub image_names: Vec<MediaUid>,
-    pub topic: String,
-}
-
-#[derive(Template)]
-#[template(path = "new.html")]
-pub struct NewTopicTemplate {}
 
 #[derive(Clone)]
 pub struct ServerState {
