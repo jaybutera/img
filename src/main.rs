@@ -62,13 +62,6 @@ async fn main_async() -> tide::Result<()> {
                 .await;
             if let Err(e) = res {
                 log::error!("Error saving thumbnail: {}", e);
-                let res = save_thumbnail(
-                    path.clone(), thumbnail_path.clone(),
-                    max_thumbnail_size)
-                    .await;
-                if let Err(e) = res {
-                    log::error!("Failed on retry saving thumbnail: {}", e);
-                }
             }
         }
     }).detach();
