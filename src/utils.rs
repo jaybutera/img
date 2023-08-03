@@ -87,7 +87,11 @@ pub async fn save_thumbnail(
 
 /// List all index files in the root/indexes directory
 pub async fn get_index_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
-    let mut entries = smol::fs::read_dir(root_dir.join("indexes")).await?;
+    let index_dir = root_dir.join("indexes");
+    if !index_dir.exists() {
+        smol::fs::create_dir(&index_dir).await?;
+    }
+    let mut entries = smol::fs::read_dir(index_dir).await?;
     let mut index_files = vec![];
     while let Some(entry) = entries.try_next().await? {
         let path = entry.path();
