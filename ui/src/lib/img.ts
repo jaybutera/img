@@ -1,6 +1,11 @@
 // Img server address
-//export const img_server: string = "http://localhost:2342";
+//export const img_server: string = "http://127.0.0.1:2342";
 export const img_server: string = "https://img.smdhi.xyz:8080";
+
+interface Index {
+    name: string;
+    topics: string[];
+}
 
 export async function get_image_names(topic: string): Promise<string[]> {
   try {
@@ -37,4 +42,32 @@ async function processFile(topic: string, file) {
     if (!response.ok) {
       throw new Error(`Error in upload: ${response.statusText}`);
     }
+}
+
+export async function get_index(index: string): Promise<Index> {
+    const response = await fetch(`${img_server}/index/${index}`);
+    //const response = await fetch(`http://127.0.0.1:2342/index/test`);
+
+    console.log("response\n", response);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    // Parse the json and check it matches the `Index` type
+    const data: Index = await response.json();
+
+    return data;
+}
+
+export async function create_index(
+    index: string,
+    topics: list[string]): Promise<void> {
+    // Make a POST request to the img server /new-index with a json body
+    const response = await fetch(`${img_server}/new-index`, {
+        method: 'POST',
+        body: JSON.stringify({
+            name: index,
+            topics: topics
+        }),
+    });
 }

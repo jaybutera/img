@@ -1,5 +1,6 @@
 <script>
     import { create_index } from "$lib/img.ts";
+    import Nav from '../../components/Nav.svelte';
     let name;
     let topics;
     let submit_result;

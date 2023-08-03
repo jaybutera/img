@@ -20,6 +20,14 @@
             rustfmt
             pre-commit
             rustPackages.clippy
+
+            # for exif/rexiv2 crates
+            /*
+            pkg-config
+            libexif
+            gexiv2
+            glib
+            */
           ];
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
         };

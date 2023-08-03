@@ -94,8 +94,10 @@ async fn main_async() -> tide::Result<()> {
 }
 
 async fn get_index(req: Request<ServerState>) -> tide::Result {
+    log::info!("get_index");
     let name = normalize_topic(req.param("name")?);
     let mut path = req.state().args.root_dir.clone();
+    path.push("indexes");
     path.push(format!("{}.json", name));
 
     let index = smol::fs::read_to_string(path).await?;
@@ -113,8 +115,13 @@ async fn create_index(mut req: Request<ServerState>) -> tide::Result {
     let index: Index = req.body_json().await?;
     let name = normalize_topic(&index.name);
     let mut path = req.state().args.root_dir.clone();
-    path.push(format!("{}.json", name));
+    path.push("indexes");
 
+    if !path.exists() {
+        smol::fs::create_dir_all(&path).await?;
+    }
+
+    path.push(format!("{}.json", name));
     if path.exists() {
         return Err(to_badreq(anyhow!("Index already exists")));
     }

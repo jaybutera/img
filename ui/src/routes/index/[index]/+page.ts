@@ -1,9 +1,9 @@
-import { get_image_names, get_index } from '$lib/img.ts';
+import { get_index } from '$lib/img.ts';
 
-export function load({ params }) {
-    const imgs = get_image_names(params.index);
+export async function load({ params }) {
+    const index = await get_index(params.index);
     return {
         index_name: params.index,
-        topics: get_index(params.index).topics,
+        topics: index.topics,
     }
 }
