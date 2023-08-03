@@ -20,7 +20,7 @@ use smol::stream::StreamExt;
 //use async_channel::{TryRecvError};
 
 use crate::migrations::generate_thumbnails;
-use crate::utils::save_thumbnail;
+use crate::utils::{save_thumbnail, get_index_paths};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -84,6 +84,7 @@ async fn main_async() -> tide::Result<()> {
 
     app.at("/new-index").post(create_index);
     app.at("/index/:name").get(get_index);
+    app.at("/all-indexes").get(get_index_list);
     app.at("/:topic/new-image").post(upload_image);
     app.at("/:topic/images").get(get_image_list);
     app.at("/thumbnail/:name").get(get_image_thumbnail);
@@ -91,6 +92,25 @@ async fn main_async() -> tide::Result<()> {
     app.listen(format!("0.0.0.0:{}", port)).await?;
 
     Ok(())
+}
+
+async fn get_index_list(req: Request<ServerState>) -> tide::Result {
+    let mut path = req.state().args.root_dir.clone();
+    let paths = get_index_paths(&path).await?;
+
+    // map to just the names
+    let paths: Vec<String> = paths.iter()
+        .map(|p| p.file_stem()
+            .expect("index does not have a file stem").to_str()
+            .expect("can't convert index filestem to string").to_string())
+        .collect();
+
+    let res = Response::builder(200)
+        .body(serde_json::to_string(&paths)?)
+        .content_type(mime::JSON)
+        .build();
+
+    Ok(res)
 }
 
 async fn get_index(req: Request<ServerState>) -> tide::Result {

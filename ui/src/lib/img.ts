@@ -1,6 +1,6 @@
 // Img server address
-//export const img_server: string = "http://127.0.0.1:2342";
-export const img_server: string = "https://img.smdhi.xyz:8080";
+export const img_server: string = "http://127.0.0.1:2342";
+//export const img_server: string = "https://img.smdhi.xyz:8080";
 
 interface Index {
     name: string;
@@ -44,11 +44,18 @@ async function processFile(topic: string, file) {
     }
 }
 
+export async function get_all_indexes(): Promise<list[string]> {
+    const response = await fetch(`${img_server}/all-indexes`);
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json() || [];
+}
 export async function get_index(index: string): Promise<Index> {
     const response = await fetch(`${img_server}/index/${index}`);
-    //const response = await fetch(`http://127.0.0.1:2342/index/test`);
 
-    console.log("response\n", response);
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }

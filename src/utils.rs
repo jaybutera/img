@@ -84,3 +84,17 @@ pub async fn save_thumbnail(
     }).await
     .map_err(|e| anyhow::anyhow!("Error saving thumbnail [{media_file1:?}]: {:?}", e))
 }
+
+/// List all index files in the root/indexes directory
+pub async fn get_index_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
+    let mut entries = smol::fs::read_dir(root_dir.join("indexes")).await?;
+    let mut index_files = vec![];
+    while let Some(entry) = entries.try_next().await? {
+        let path = entry.path();
+        if path.extension().map(|ext| ext == "json").unwrap_or(false) {
+            index_files.push(path);
+        }
+    }
+
+    Ok(index_files)
+}

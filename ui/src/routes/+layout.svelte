@@ -1,4 +1,12 @@
 <style>
+    .nt-form {
+        width: 30%;
+        height: 50px;
+        font-size: 20px;
+        border-radius: 10px;
+        border: 1px solid #ccc;
+        padding: 10px;
+    }
     nav {
         display: flex;
         justify-content: space-around;
