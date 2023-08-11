@@ -1,4 +1,4 @@
-<style>
+<style global>
     .nt-form {
         width: 30%;
         height: 50px;
