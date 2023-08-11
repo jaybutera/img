@@ -29,6 +29,27 @@
         justify-content: center;
         max-width: 66%;
     }
+    .sub-container {
+        position: relative;
+        display: inline-block; /* So the container will size itself to the image */
+    }
+
+    .media {
+        display: block;  /* Remove default image margin */
+        max-width: 100%;
+        height: auto;
+    }
+
+    h2 {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%); /* Centers the text both vertically and horizontally */
+        font-size: 4em;
+        font-weight: bold;
+        color: white;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
 </style>
 
 <Nav>
@@ -36,7 +57,6 @@
 
 <div class="center-container">
 <div class="container">
-    <!-- zip topic and image_names together -->
     {#each topics as topic, i}
             <a href="/{topic}">
                 <div class="sub-container">
