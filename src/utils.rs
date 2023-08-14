@@ -117,7 +117,9 @@ pub async fn get_tags_for_topic(
         file.read_to_end(&mut raw_json).await?;
 
         let index: Index = serde_json::from_slice(&raw_json)?;
-        tags.extend(index.topics);
+        if index.topics.contains(&topic.to_string()) {
+            tags.insert(index.name);
+        }
     }
 
     Ok(tags)

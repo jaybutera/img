@@ -7,6 +7,16 @@ interface Index {
     topics: string[];
 }
 
+export async function get_tags(topic: string): Promise<string[]> {
+    let response = await fetch(`${img_server}/${topic}/tags`);
+    
+    if (!response.ok) {
+      throw new Error(`Error retrieving tags: ${response.statusText}`);
+    }
+
+    return await response.json() || [];
+}
+
 export async function get_image_names(topic: string): Promise<string[]> {
   try {
     // Make a GET request to the endpoint
