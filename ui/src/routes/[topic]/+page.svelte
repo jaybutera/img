@@ -3,11 +3,13 @@
     import { img_server, handle_file_upload } from "$lib/img.ts";
     import { goto } from "$app/navigation";
     import Uploading from '../../components/Uploading.svelte';
+    import Modal from '../../components/Modal.svelte';
     export let data;
     const imgs = data.images;
     const topic = data.topic;
     let not_uploading = true;
     let selected_files;
+    let showModal = false;
 
     async function upload_file(event) {
         let task = handle_file_upload(topic, selected_files);
@@ -36,24 +38,32 @@
         max-width: 100%;
     }
     button {
-    background-color: grey;
-    border: none;
-    color: white;
-    padding: 15px 32px;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-  }
+        background-color: grey;
+        border: none;
+        color: white;
+        padding: 15px 32px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+    }
 </style>
 
 <Nav>
     <!--<a href="/new">Add Photos</a>-->
     <!-- Hidden input for file upload -->
     <input bind:files={selected_files} type='file' id='file' on:change={upload_file} multiple style='display: none;' />
+    <!-- on click open a modal to add tags -->
+    <a href="javascript:void(0)" on:click={() => showModal = true}>Settings</a>
     <!-- Visible button that triggers the hidden input -->
-    <button on:click={() => document.getElementById('file').click()}>Upload File</button>
+    <a on:click={() => document.getElementById('file').click()}>Upload</a>
 </Nav>
+
+{#if showModal}
+    <Modal on:close={() => showModal = false}>
+        <h1>Your Modal Content Here</h1>
+    </Modal>
+{/if}
 
 {#if not_uploading}
 <div class="grid">
