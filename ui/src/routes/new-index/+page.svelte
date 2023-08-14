@@ -19,8 +19,12 @@
     <p>{submit_result}</p>
 {/if}
 <!-- input name and a list of topics -->
-<input bind:value={name} type="text" name="name" placeholder="index name" />
-<input bind:value={topics} type="text" name="topics" placeholder="topic-1, topic-2, ..." />
+<div class="vert-new-form">
+    <div class="new-form">
+        <input bind:value={name} type="text" class="nt-field nt-form" name="name" placeholder="index name" />
+        <input bind:value={topics} type="text" class="nt-field nt-form" name="topics" placeholder="topic-1, topic-2, ..." />
 
-<!-- submit button, create_index takes the name and topics -->
-<button on:click={submit_index}>Create Index</button>
+        <!-- submit button, create_index takes the name and topics -->
+        <button class="nt-form submit-form" on:click={submit_index}>Create Index</button>
+    </div>
+</div>
