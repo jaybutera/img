@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 use blocking::unblock;
 use smol::stream::StreamExt;
-use crate::types::TopicData;
+use crate::types::{TopicData, Index};
 use smol::io::{AsyncReadExt, BufReader};
 use image::{io::Reader, imageops::FilterType};
 use tide::log;
@@ -101,4 +101,24 @@ pub async fn get_index_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
     }
 
     Ok(index_files)
+}
+
+/// Search all /indexes/*.json files for the existence of the topic
+use std::collections::HashSet;
+pub async fn get_tags_for_topic(
+    root_dir: &PathBuf,
+    topic: &str,
+) -> Result<HashSet<String>> {
+    let index_paths = get_index_paths(root_dir).await?;
+    let mut tags = HashSet::new();
+    for index_path in index_paths {
+        let mut file = smol::fs::File::open(&index_path).await?;
+        let mut raw_json = vec![];
+        file.read_to_end(&mut raw_json).await?;
+
+        let index: Index = serde_json::from_slice(&raw_json)?;
+        tags.extend(index.topics);
+    }
+
+    Ok(tags)
 }
