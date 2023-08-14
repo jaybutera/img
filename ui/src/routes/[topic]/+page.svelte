@@ -1,5 +1,6 @@
 <script>
     import Nav from "../../components/Nav.svelte";
+    import TopicSettings from "../../components/TopicSettings.svelte";
     import { img_server, handle_file_upload } from "$lib/img.ts";
     import { goto } from "$app/navigation";
     import Uploading from '../../components/Uploading.svelte';
@@ -61,7 +62,7 @@
 
 {#if showModal}
     <Modal on:close={() => showModal = false}>
-        <h1>Your Modal Content Here</h1>
+        <TopicSettings topic={topic} />
     </Modal>
 {/if}
 

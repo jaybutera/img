@@ -31,6 +31,6 @@
 <div class="modal-background" on:click={close}>
     <div class="modal-content" on:click={e => e.stopPropagation()}>
         <slot></slot>
-        <button on:click={close}>Close</button>
+        <button class="nt-form" on:click={close}>Close</button>
     </div>
 </div>

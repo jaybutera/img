@@ -30,26 +30,34 @@
         max-width: 66%;
     }
     .sub-container {
-        position: relative;
-        display: inline-block; /* So the container will size itself to the image */
-    }
+    position: relative;
+    display: inline-block; /* So the container will size itself to the image */
+    width: 100%; /* Take full width */
+    font-size: 0; /* This will prevent unwanted space between inline-block elements */
+}
 
-    .media {
-        display: block;  /* Remove default image margin */
-        max-width: 100%;
-        height: auto;
-    }
+.media {
+    display: block;  /* Remove default image margin */
+    max-width: 100%; /* To ensure the image scales responsively */
+    width: 100%; /* To ensure the image takes full width of its container */
+    height: auto;
+}
 
-    h2 {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%); /* Centers the text both vertically and horizontally */
-        font-size: 4em;
-        font-weight: bold;
-        color: white;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-    }
+h2 {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Centers the text both vertically and horizontally */
+    font-size: calc(5vw + 1vmin); /* Responsive font size using a combination of viewport width and minimum value between viewport height and width */
+    font-weight: bold;
+    color: white;  /* Adjust color if needed */
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);  /* Optional: for better text visibility against bright images */
+    width: 80%; /* Adjusts width to 80% of the container */
+    text-align: center; /* Center align text */
+    white-space: nowrap; /* Prevents text from wrapping to the next line */
+    overflow: hidden; /* Ensures text doesn't spill out even if it doesn't fit */
+    text-overflow: ellipsis; /* Adds ... for overflowed content */
+}
 </style>
 
 <Nav>
