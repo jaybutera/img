@@ -53,7 +53,6 @@
 <div class="vert-new-form">
     <div class="new-form">
         <h1>Add Tags</h1>
-        <h2>This doesn't work yet...</h2>
         <!-- list of tags -->
         <h3>Current Tags</h3>
         <ul>
