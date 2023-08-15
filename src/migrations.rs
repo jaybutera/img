@@ -1,15 +1,9 @@
 use crate::types::{Args, Index, TopicData, MediaUid};
 use anyhow::anyhow;
-use std::fmt::Debug;
-use std::str::FromStr;
-use http_types::mime::{self, Mime};
 use std::path::PathBuf;
 use structopt::StructOpt;
-use tide::{log, Body, Request, Response, StatusCode};
-use acidjson::AcidJson;
+use tide::log;
 use smol::io::AsyncWriteExt;
-use http_types::headers::HeaderValue;
-use tide::security::{CorsMiddleware, Origin};
 use async_fs::File;
 use smol::io::{AsyncReadExt, BufReader};
 use smol::stream::StreamExt;

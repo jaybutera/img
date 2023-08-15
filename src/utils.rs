@@ -5,6 +5,8 @@ use smol::stream::StreamExt;
 use crate::types::{TopicData, Index};
 use smol::io::{AsyncReadExt, BufReader};
 use image::{io::Reader, imageops::FilterType};
+use std::collections::HashSet;
+use smol::io::AsyncWriteExt;
 use tide::log;
 
 /// Get all topic file paths in the root directory
@@ -104,10 +106,9 @@ pub async fn get_index_paths(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
 }
 
 /// Search all /indexes/*.json files for the existence of the topic
-use std::collections::HashSet;
 pub async fn get_tags_for_topic(
     root_dir: &PathBuf,
-    topic: &str,
+    topic: &String,
 ) -> Result<HashSet<String>> {
     let index_paths = get_index_paths(root_dir).await?;
     let mut tags = HashSet::new();
@@ -117,10 +118,74 @@ pub async fn get_tags_for_topic(
         file.read_to_end(&mut raw_json).await?;
 
         let index: Index = serde_json::from_slice(&raw_json)?;
-        if index.topics.contains(&topic.to_string()) {
+        if index.topics.contains(topic) {
             tags.insert(index.name);
         }
     }
 
     Ok(tags)
+}
+
+pub async fn add_tag_for_topic(
+    root_dir: &PathBuf,
+    topic: String,
+    tag: String,
+) -> Result<()> {
+    let index_paths = get_index_paths(root_dir).await?;
+
+    let mut tag_path = root_dir.join("indexes");
+    tag_path.push(tag.clone());
+
+    // Read the index if it exists, otherwise create it
+    let mut index = if tag_path.exists() {
+        let mut file = smol::fs::File::open(&tag_path).await?;
+        let mut raw_json = vec![];
+        file.read_to_end(&mut raw_json).await?;
+        serde_json::from_slice(&raw_json)?
+    } else {
+        Index {
+            name: tag,
+            topics: HashSet::new(),
+        }
+    };
+    index.topics.insert(topic.clone());
+
+    // Write to a temporary {topic}.temp.json and then rename
+    let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
+    let mut file = smol::fs::File::create(&temp_tag_path).await?;
+    file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
+    std::fs::rename(temp_tag_path, &tag_path)?;
+
+    Ok(())
+}
+
+pub async fn rm_tag_for_topic(
+    root_dir: &PathBuf,
+    topic: String,
+    tag: String,
+) -> Result<()> {
+    let index_paths = get_index_paths(root_dir).await?;
+
+    let mut tag_path = root_dir.join("indexes");
+    tag_path.push(tag.clone());
+
+    // Read the index if it exists, otherwise fail
+    let mut index: Index = if tag_path.exists() {
+        let mut file = smol::fs::File::open(&tag_path).await?;
+        let mut raw_json = vec![];
+        file.read_to_end(&mut raw_json).await?;
+        serde_json::from_slice(&raw_json)?
+    } else {
+        return Err(anyhow::anyhow!("Tag does not exist"));
+    };
+
+    index.topics.remove(&topic);
+
+    // Write to a temporary {topic}.temp.json and then rename
+    let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
+    let mut file = smol::fs::File::create(&temp_tag_path).await?;
+    file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
+    std::fs::rename(temp_tag_path, &tag_path)?;
+
+    Ok(())
 }

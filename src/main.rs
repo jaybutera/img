@@ -20,7 +20,13 @@ use smol::stream::StreamExt;
 //use async_channel::{TryRecvError};
 
 use crate::migrations::generate_thumbnails;
-use crate::utils::{save_thumbnail, get_index_paths, get_tags_for_topic};
+use crate::utils::{
+    save_thumbnail,
+    get_index_paths,
+    get_tags_for_topic,
+    add_tag_for_topic,
+    rm_tag_for_topic,
+};
 
 fn main() -> tide::Result<()> {
     smol::block_on(main_async())
@@ -88,6 +94,8 @@ async fn main_async() -> tide::Result<()> {
     app.at("/:topic/new-image").post(upload_image);
     app.at("/:topic/images").get(get_image_list);
     app.at("/:topic/tags").get(get_tag_list);
+    app.at("/:topic/new-tag").post(add_tag_to_topic);
+    app.at("/:topic/remove-tag").post(rm_tag_from_topic);
     app.at("/thumbnail/:name").get(get_image_thumbnail);
     app.at("/img/:name").get(get_image_full);
     app.listen(format!("0.0.0.0:{}", port)).await?;
@@ -196,6 +204,28 @@ async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Err
         .expect(&format!("Unsupported filetype {:?} is somehow being fetched", ext));
     let image = smol::fs::read(path).await?;
     Ok((image, mime))
+}
+
+async fn rm_tag_from_topic(mut req: Request<ServerState>) -> tide::Result {
+    let topic = normalize_topic(req.param("topic")?);
+    let tag = req.body_json::<String>().await?;
+    let mut path = req.state().args.root_dir.clone();
+    path.push(format!("{}.json", topic));
+
+    rm_tag_for_topic(&mut path, topic, tag).await?;
+
+    Ok(Response::new(StatusCode::Ok))
+}
+
+async fn add_tag_to_topic(mut req: Request<ServerState>) -> tide::Result {
+    let topic = normalize_topic(req.param("topic")?);
+    let tag = req.body_json::<String>().await?;
+    let mut path = req.state().args.root_dir.clone();
+    path.push(format!("{}.json", topic));
+
+    add_tag_for_topic(&mut path, topic, tag).await?;
+
+    Ok(Response::new(StatusCode::Ok))
 }
 
 async fn get_tag_list(req: Request<ServerState>) -> tide::Result<Body> {

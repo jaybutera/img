@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
+use std::collections::HashSet;
 use tide::log;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
@@ -90,7 +91,7 @@ impl TopicData {
 #[derive(Serialize, Deserialize)]
 pub struct Index {
     pub name: String,
-    pub topics: Vec<String>,
+    pub topics: HashSet<String>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq)]
