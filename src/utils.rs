@@ -133,6 +133,12 @@ pub async fn add_tag_for_topic(
 ) -> Result<()> {
     let index_paths = get_index_paths(root_dir).await?;
 
+    // If root_dir/indexes directory doesnt exist, create it
+    let mut tag_path = root_dir.join("indexes");
+    if !tag_path.exists() {
+        smol::fs::create_dir(&tag_path).await?;
+    }
+
     let mut tag_path = root_dir.join("indexes");
     tag_path.push(format!("{}.json", tag));
 

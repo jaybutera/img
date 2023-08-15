@@ -88,7 +88,6 @@ async fn main_async() -> tide::Result<()> {
         .allow_credentials(false);
     app.with(cors);
 
-    app.at("/new-index").post(create_index);
     app.at("/index/:name").get(get_index);
     app.at("/all-indexes").get(get_index_list);
     app.at("/:topic/new-image").post(upload_image);
@@ -137,31 +136,6 @@ async fn get_index(req: Request<ServerState>) -> tide::Result {
         .build();
 
     Ok(res)
-}
-
-/// Request contains a json file for the index which is saved into /indexes/<name>.json
-async fn create_index(mut req: Request<ServerState>) -> tide::Result {
-    let index: Index = req.body_json().await?;
-    let name = normalize_topic(&index.name);
-    let mut path = req.state().args.root_dir.clone();
-    path.push("indexes");
-
-    if !path.exists() {
-        smol::fs::create_dir_all(&path).await?;
-    }
-
-    path.push(format!("{}.json", name));
-    if path.exists() {
-        return Err(to_badreq(anyhow!("Index already exists")));
-    }
-
-    // write index json file
-    let index_str = serde_json::to_string(&index)?;
-    let mut file = smol::fs::File::create(path).await?;
-    file.write_all(index_str.as_bytes()).await?;
-
-    Ok(Response::new(StatusCode::Ok))
-
 }
 
 async fn get_image_full(req: Request<ServerState>) -> tide::Result {
