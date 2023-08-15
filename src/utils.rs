@@ -134,7 +134,7 @@ pub async fn add_tag_for_topic(
     let index_paths = get_index_paths(root_dir).await?;
 
     let mut tag_path = root_dir.join("indexes");
-    tag_path.push(tag.clone());
+    tag_path.push(format!("{}.json", tag));
 
     // Read the index if it exists, otherwise create it
     let mut index = if tag_path.exists() {
@@ -154,7 +154,7 @@ pub async fn add_tag_for_topic(
     let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
     let mut file = smol::fs::File::create(&temp_tag_path).await?;
     file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
-    std::fs::rename(temp_tag_path, &tag_path)?;
+    std::fs::rename(temp_tag_path, &tag_path.with_extension("json"))?;
 
     Ok(())
 }
@@ -167,7 +167,7 @@ pub async fn rm_tag_for_topic(
     let index_paths = get_index_paths(root_dir).await?;
 
     let mut tag_path = root_dir.join("indexes");
-    tag_path.push(tag.clone());
+    tag_path.push(format!("{}.json", tag));
 
     // Read the index if it exists, otherwise fail
     let mut index: Index = if tag_path.exists() {
@@ -181,11 +181,16 @@ pub async fn rm_tag_for_topic(
 
     index.topics.remove(&topic);
 
-    // Write to a temporary {topic}.temp.json and then rename
-    let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
-    let mut file = smol::fs::File::create(&temp_tag_path).await?;
-    file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
-    std::fs::rename(temp_tag_path, &tag_path)?;
+    // If topics is empty remove the index file
+    if index.topics.is_empty() {
+        smol::fs::remove_file(&tag_path).await?;
+    } else {
+        // Write to a temporary {topic}.temp.json and then rename
+        let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
+        let mut file = smol::fs::File::create(&temp_tag_path).await?;
+        file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
+        std::fs::rename(temp_tag_path, &tag_path.with_extension("json"))?;
+    }
 
     Ok(())
 }

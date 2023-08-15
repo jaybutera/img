@@ -209,10 +209,8 @@ async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Err
 async fn rm_tag_from_topic(mut req: Request<ServerState>) -> tide::Result {
     let topic = normalize_topic(req.param("topic")?);
     let tag = req.body_json::<String>().await?;
-    let mut path = req.state().args.root_dir.clone();
-    path.push(format!("{}.json", topic));
 
-    rm_tag_for_topic(&mut path, topic, tag).await?;
+    rm_tag_for_topic(&req.state().args.root_dir, topic, tag).await?;
 
     Ok(Response::new(StatusCode::Ok))
 }
@@ -220,10 +218,8 @@ async fn rm_tag_from_topic(mut req: Request<ServerState>) -> tide::Result {
 async fn add_tag_to_topic(mut req: Request<ServerState>) -> tide::Result {
     let topic = normalize_topic(req.param("topic")?);
     let tag = req.body_json::<String>().await?;
-    let mut path = req.state().args.root_dir.clone();
-    path.push(format!("{}.json", topic));
 
-    add_tag_for_topic(&mut path, topic, tag).await?;
+    add_tag_for_topic(&req.state().args.root_dir, topic, tag).await?;
 
     Ok(Response::new(StatusCode::Ok))
 }

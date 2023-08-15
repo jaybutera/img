@@ -1,17 +1,48 @@
 <script>
-    import { create_index, get_tags } from "$lib/img.ts";
+    import { create_index, get_tags, add_tag, rm_tag } from "$lib/img.ts";
     import Nav from './Nav.svelte';
     export let topic;
-    let topics;
+    let tag;
     let submit_result;
+    let tags = get_tags(topic);
 
-    function parse_topics_list(topics) {
-        return topics.split(",").map((topic) => topic.trim());
+    async function rm_tag_handler(tag) {
+        let res = await rm_tag(topic, tag);
+        if (!res.ok) {
+            submit_result = res;
+        }
+        // Reload
+        tags = await get_tags(topic);
     }
-    async function submit_index() {
-        submit_result = await create_index(topic, parse_topics_list(topics));
+    async function add_tag_handler() {
+        let res = await add_tag(topic, tag);
+        if (!res.ok) {
+            submit_result = res;
+        }
+        // Reload
+        tags = await get_tags(topic);
     }
 </script>
+
+<style>
+    .tag-list {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    .tag {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .tag span {
+        margin-right: 0.5em;
+        padding: 0.5em;
+        border: 1px solid black;
+        border-radius: 0.3em;
+    }
+</style>
 
 <div class="vert-new-form">
     <div class="new-form">
@@ -20,19 +51,30 @@
         <!-- list of tags -->
         <h3>Current Tags</h3>
         <ul>
-            {#await get_tags(topic)}
+            {#await tags}
                 <li>loading...</li>
             {:then tags}
-                {#each tags as tag}
-                    <li>{tag}</li>
-                {/each}
+                <div class="tag-list">
+                    {#each tags as tag}
+                        <div class="tag">
+                            <span>
+                                {tag}
+                                <button on:click={() => rm_tag_handler(tag)}>X</button>
+                            </span>
+                        </div>
+                    {/each}
+                </div>
             {:catch error}
                 <li>error: {error.message}</li>
             {/await}
         </ul>
 
-        <input bind:value={topics} type="text" class="nt-field nt-form" name="topics" placeholder="topic-1, topic-2, ..." />
-
-        <button class="nt-form submit-form" on:click={submit_index}>Add Tag</button>
+        <div class="add-form">
+            <input bind:value={tag} type="text" class="nt-field nt-form" name="topics" placeholder="topic-1, topic-2, ..." />
+            <button class="nt-form submit-form" on:click={() => add_tag_handler()}>Add Tag</button>
+            {#if submit_result}
+                <p>{submit_result}</p>
+            {/if}
+        </div>
     </div>
 </div>

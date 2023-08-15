@@ -1,10 +1,28 @@
 // Img server address
-//export const img_server: string = "http://127.0.0.1:2342";
-export const img_server: string = "https://img.smdhi.xyz:8080";
+export const img_server: string = "http://127.0.0.1:2342";
+//export const img_server: string = "https://img.smdhi.xyz:8080";
 
 interface Index {
     name: string;
     topics: string[];
+}
+
+export async function rm_tag(topic: string, tag: string): Promise<string> {
+    let response = await fetch(`${img_server}/${topic}/remove-tag`, {
+        method: 'POST',
+        body: `"${tag}"`,
+    });
+
+    return response;
+}
+
+export async function add_tag(topic: string, tag: string): Promise<string> {
+    let response = await fetch(`${img_server}/${topic}/new-tag`, {
+        method: 'POST',
+        body: `"${tag}"`,
+    });
+    
+    return response;
 }
 
 export async function get_tags(topic: string): Promise<string[]> {
