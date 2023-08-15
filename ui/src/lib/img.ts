@@ -1,6 +1,6 @@
 // Img server address
-export const img_server: string = "http://127.0.0.1:2342";
-//export const img_server: string = "https://img.smdhi.xyz:8080";
+//export const img_server: string = "http://127.0.0.1:2342";
+export const img_server: string = "https://img.smdhi.xyz:8080";
 
 interface Index {
     name: string;

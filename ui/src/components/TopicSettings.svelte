@@ -42,6 +42,12 @@
         border: 1px solid black;
         border-radius: 0.3em;
     }
+    .add-form {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
 </style>
 
 <div class="vert-new-form">
