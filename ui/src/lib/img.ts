@@ -7,6 +7,11 @@ interface Index {
     topics: string[];
 }
 
+export async function generate_key(): Promise<Uint8Array> {
+    let response = await fetch(`${img_server}/generate-key`);
+    return response;
+}
+
 export async function rm_tag(topic: string, tag: string): Promise<string> {
     let response = await fetch(`${img_server}/${topic}/remove-tag`, {
         method: 'POST',
