@@ -18,6 +18,14 @@ impl std::fmt::Display for HashVal {
 }
 */
 
+pub type PublicKey = Vec<u8>;
+
+#[derive(Serialize, Deserialize)]
+pub struct VerificationPayload {
+    pub public_key: PublicKey,
+    pub signature: Vec<u8>,
+}
+
 #[derive(Clone)]
 pub struct ServerState {
     pub args: Args,

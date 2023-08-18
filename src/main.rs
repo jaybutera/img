@@ -2,7 +2,8 @@ mod types;
 mod migrations;
 mod utils;
 
-use types::{ServerState, Index, TopicData, MediaUid};
+use types::{VerificationPayload, ServerState, Index, TopicData, MediaUid};
+use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -17,6 +18,7 @@ use tide::security::{CorsMiddleware, Origin};
 use async_fs::File;
 use smol::io::{AsyncRead, AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
+use rand_core;
 //use async_channel::{TryRecvError};
 
 use crate::migrations::generate_thumbnails;
@@ -89,7 +91,7 @@ async fn main_async() -> tide::Result<()> {
     app.with(cors);
 
     app.at("/index/:name").get(get_index);
-    app.at("/all-indexes").get(get_index_list);
+    //app.at("/all-indexes").get(get_index_list);
     app.at("/:topic/new-image").post(upload_image);
     app.at("/:topic/images").get(get_image_list);
     app.at("/:topic/tags").get(get_tag_list);
@@ -97,9 +99,64 @@ async fn main_async() -> tide::Result<()> {
     app.at("/:topic/remove-tag").post(rm_tag_from_topic);
     app.at("/thumbnail/:name").get(get_image_thumbnail);
     app.at("/img/:name").get(get_image_full);
+    app.at("/generate-keys").get(generate_keys);
+    app.at("/generate-challenge").get(generate_challenge);
+    app.at("/authenticate").post(authenticate);
     app.listen(format!("0.0.0.0:{}", port)).await?;
 
     Ok(())
+}
+
+async fn generate_keys(req: Request<ServerState>) -> tide::Result {
+    let keypair = SigningKey::generate(&mut rand_core::OsRng);
+
+    let res = Response::builder(200)
+        .body(serde_json::to_string(&keypair.to_bytes())?)
+        .content_type(mime::JSON)
+        .build();
+
+    Ok(res)
+}
+
+async fn generate_challenge(mut req: Request<ServerState>) -> tide::Result {
+    let challenge: [u8; 32] = rand::random();
+
+    // Store the challenge in the session
+    req.session_mut().insert("challenge", challenge.to_vec())?;
+
+    let res = Response::builder(200)
+        .body(serde_json::to_string(&challenge)?)
+        .content_type(mime::JSON)
+        .build();
+
+    Ok(res)
+}
+
+async fn authenticate(mut req: Request<ServerState>) -> tide::Result {
+    let payload: VerificationPayload = req.body_json().await?;
+    let pubkey: [u8; 32] = payload.public_key[..].try_into()?;
+    let public_key = VerifyingKey::from_bytes(&pubkey)?;
+
+    // Check if the challenge in the session matches the provided challenge
+    let stored_challenge = req.session().get::<Vec<u8>>("challenge")
+        .ok_or(to_badreq(anyhow!("No challenge found in session!")))?;
+
+    // Remove the challenge from the session to ensure it can't be used again
+    req.session_mut().remove("challenge");
+
+    let sig: [u8; 64] = payload.signature[..].try_into()?;
+    let signature = Signature::from_bytes(&sig);
+    if public_key.verify(&stored_challenge, &signature).is_ok() {
+        req.session_mut().insert("verified", true)?;
+        Ok(Response::new(StatusCode::Ok))
+    } else {
+        Err(to_badreq(anyhow!("Signature is invalid!")))
+    }
+        /*
+    } else {
+        Err(to_badreq(anyhow!("No challenge found in session!")))
+    }
+        */
 }
 
 async fn get_index_list(req: Request<ServerState>) -> tide::Result {
@@ -298,6 +355,12 @@ async fn upload_image(mut req: Request<ServerState>) -> tide::Result {
     let topic = normalize_topic(req.param("topic")?);
     let mut topic_path = req.state().args.root_dir.clone();
     topic_path.push(format!("{}.json", topic));
+
+    // Verify user
+    let session = req.session();
+    if session.get("verified") != Some(true) {
+        return Err(to_badreq(anyhow!("Not verified please authenticate.")));
+    }
 
     // Add the image if its not already in the root dir
     let reader = smol::io::BufReader::new(req.take_body());
