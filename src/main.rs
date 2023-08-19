@@ -18,6 +18,7 @@ use tide::security::{CorsMiddleware, Origin};
 use async_fs::File;
 use smol::io::{AsyncRead, AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
+use sha3::Digest;
 use rand_core;
 //use async_channel::{TryRecvError};
 
@@ -86,11 +87,18 @@ async fn main_async() -> tide::Result<()> {
     let mut app = tide::with_state(state);
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
-        .allow_origin(Origin::from("*"))
-        .allow_credentials(false);
+        //.allow_origin(Origin::from("*"))
+        .allow_origin(Origin::from("http://localhost:5173"))
+        .allow_credentials(true);
+    let sessions = tide::sessions::SessionMiddleware::new(
+        tide::sessions::MemoryStore::new(),
+        &"sessionasdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdf".to_string().into_bytes(),
+        //args.session_key.as_bytes(),
+    );
+    app.with(sessions);
     app.with(cors);
 
-    app.at("/index/:name").get(get_index);
+    app.at("/tag/:name").get(get_index);
     //app.at("/all-indexes").get(get_index_list);
     app.at("/:topic/new-image").post(upload_image);
     app.at("/:topic/images").get(get_image_list);
@@ -99,7 +107,7 @@ async fn main_async() -> tide::Result<()> {
     app.at("/:topic/remove-tag").post(rm_tag_from_topic);
     app.at("/thumbnail/:name").get(get_image_thumbnail);
     app.at("/img/:name").get(get_image_full);
-    app.at("/generate-keys").get(generate_keys);
+    app.at("/generate-key").get(generate_keys);
     app.at("/generate-challenge").get(generate_challenge);
     app.at("/authenticate").post(authenticate);
     app.listen(format!("0.0.0.0:{}", port)).await?;
@@ -109,9 +117,12 @@ async fn main_async() -> tide::Result<()> {
 
 async fn generate_keys(req: Request<ServerState>) -> tide::Result {
     let keypair = SigningKey::generate(&mut rand_core::OsRng);
+    // Hash with sha512 for 64 bytes
+    //let hash = sha3::Sha3_512::digest(&keypair.to_bytes());
+    let encoded = base64::encode(&keypair.to_bytes());
 
     let res = Response::builder(200)
-        .body(serde_json::to_string(&keypair.to_bytes())?)
+        .body(serde_json::to_string(&encoded)?)
         .content_type(mime::JSON)
         .build();
 
@@ -123,6 +134,7 @@ async fn generate_challenge(mut req: Request<ServerState>) -> tide::Result {
 
     // Store the challenge in the session
     req.session_mut().insert("challenge", challenge.to_vec())?;
+    let challenge = base64::encode(challenge);
 
     let res = Response::builder(200)
         .body(serde_json::to_string(&challenge)?)
