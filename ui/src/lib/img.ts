@@ -1,10 +1,57 @@
+import { sign } from 'tweetnacl';
+import { Buffer } from 'buffer';
+import * as ed from '@noble/ed25519';
+//import * as nacl from 'tweetnacl';
 // Img server address
-//export const img_server: string = "http://127.0.0.1:2342";
-export const img_server: string = "https://img.smdhi.xyz:8080";
+export const img_server: string = "http://127.0.0.1:2342";
+//export const img_server: string = "https://img.smdhi.xyz:8080";
 
 interface Index {
     name: string;
     topics: string[];
+}
+
+export async function authenticate(challenge: Uint8Array): Promise<void> { 
+    let private_key = localStorage.getItem('private_key');
+    const decoded = Buffer.from(private_key, 'base64');
+    // Convert private key to Uint8Array
+    //let keypair = sign.keyPair.fromSecretKey(decoded);
+    const pubKey = await ed.getPublicKeyAsync(decoded);
+    const sig = await ed.signAsync(challenge, decoded);
+    /*
+    let sig = sign(challenge, keypair.secretKey);
+        console.log(JSON.stringify({
+            signature: [...sig],
+            public_key: [...keypair.publicKey],
+        }));
+        */
+
+    const response = await fetch(`${img_server}/authenticate`, {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+            signature: [...sig],
+            public_key: [...pubKey],
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Error authenticating: ${response.status}`);
+    }
+}
+
+export async function get_challenge(): Promise<Uint8Array> {
+    const response = await fetch(`${img_server}/generate-challenge`, {
+        credentials: 'include',
+    });
+
+    if (!response.ok) {
+        throw new Error(`Error getting challenge: ${response.status}`);
+    }
+    let encoded = await response.json();
+    console.log(encoded);
+    const decoded = Buffer.from(encoded, 'base64');
+    return decoded;
 }
 
 export async function generate_key(): Promise<Uint8Array> {

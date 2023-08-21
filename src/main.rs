@@ -20,7 +20,6 @@ use smol::io::{AsyncRead, AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
 use sha3::Digest;
 use rand_core;
-//use async_channel::{TryRecvError};
 
 use crate::migrations::generate_thumbnails;
 use crate::utils::{
@@ -85,6 +84,7 @@ async fn main_async() -> tide::Result<()> {
     };
 
     let mut app = tide::with_state(state);
+    use tide::http::cookies::SameSite;
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
         //.allow_origin(Origin::from("*"))
@@ -94,7 +94,8 @@ async fn main_async() -> tide::Result<()> {
         tide::sessions::MemoryStore::new(),
         &"sessionasdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdf".to_string().into_bytes(),
         //args.session_key.as_bytes(),
-    );
+    )
+    .with_same_site_policy(SameSite::Lax);
     app.with(sessions);
     app.with(cors);
 
@@ -134,6 +135,11 @@ async fn generate_challenge(mut req: Request<ServerState>) -> tide::Result {
 
     // Store the challenge in the session
     req.session_mut().insert("challenge", challenge.to_vec())?;
+
+    // Get the sid from the session
+    let sid = req.session().id();
+    log::info!("Session ID: {}", sid);
+
     let challenge = base64::encode(challenge);
 
     let res = Response::builder(200)
@@ -148,6 +154,9 @@ async fn authenticate(mut req: Request<ServerState>) -> tide::Result {
     let payload: VerificationPayload = req.body_json().await?;
     let pubkey: [u8; 32] = payload.public_key[..].try_into()?;
     let public_key = VerifyingKey::from_bytes(&pubkey)?;
+
+    let sid = req.session().id();
+    log::info!("Session ID: {}", sid);
 
     // Check if the challenge in the session matches the provided challenge
     let stored_challenge = req.session().get::<Vec<u8>>("challenge")
@@ -223,6 +232,8 @@ async fn get_image_full(req: Request<ServerState>) -> tide::Result {
 }
 
 async fn get_image_thumbnail(req: Request<ServerState>) -> tide::Result {
+    let sid = req.session().id();
+    log::info!("Session ID: {}", sid);
     let name = req.param("name")?;
     let mut path = req.state().args.root_dir.clone();
     // Use the thumbnail
