@@ -2,37 +2,27 @@ mod types;
 mod migrations;
 mod utils;
 
-use types::{VerificationPayload, ServerState, Index, TopicData, MediaUid};
+use actix_session::Session;
+use actix_web::{web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
+use actix_cors::Cors;
+
+use types::{AnyError, VerificationPayload, ServerState, Index, TopicData, MediaUid};
 use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
-use std::fmt::Debug;
 use std::str::FromStr;
 use http_types::mime::{self, Mime};
 use std::path::PathBuf;
-use structopt::StructOpt;
-use tide::{log, Body, Request, Response, StatusCode};
 use acidjson::AcidJson;
-use smol::io::AsyncWriteExt;
-use http_types::headers::HeaderValue;
-use tide::security::{CorsMiddleware, Origin};
-use async_fs::File;
-use smol::io::{AsyncRead, AsyncReadExt, BufReader};
-use smol::stream::StreamExt;
-use sha3::Digest;
 use rand_core;
 
-use crate::migrations::generate_thumbnails;
 use crate::utils::{
+    save_media,
     save_thumbnail,
     get_index_paths,
     get_tags_for_topic,
     add_tag_for_topic,
     rm_tag_for_topic,
 };
-
-fn main() -> tide::Result<()> {
-    smol::block_on(main_async())
-}
 
 fn normalize_topic(topic: &str) -> String {
     topic.to_lowercase()
@@ -42,7 +32,8 @@ fn normalize_topic(topic: &str) -> String {
         .trim().to_string()
 }
 
-async fn main_async() -> tide::Result<()> {
+/*
+async fn main_async() -> Result<()> {
     let args = types::Args::from_args();
     log::start();
 
@@ -83,15 +74,15 @@ async fn main_async() -> tide::Result<()> {
         thumbnail_sender: thumbnail_queue_sender,
     };
 
-    let mut app = tide::with_state(state);
-    use tide::http::cookies::SameSite;
+    let mut app = with_state(state);
+    use http::cookies::SameSite;
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
         //.allow_origin(Origin::from("*"))
         .allow_origin(Origin::from("http://localhost:5173"))
         .allow_credentials(true);
-    let sessions = tide::sessions::SessionMiddleware::new(
-        tide::sessions::MemoryStore::new(),
+    let sessions = sessions::SessionMiddleware::new(
+        sessions::MemoryStore::new(),
         &"sessionasdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdf".to_string().into_bytes(),
         //args.session_key.as_bytes(),
     )
@@ -101,11 +92,11 @@ async fn main_async() -> tide::Result<()> {
 
     app.at("/tag/:name").get(get_index);
     //app.at("/all-indexes").get(get_index_list);
-    app.at("/:topic/new-image").post(upload_image);
-    app.at("/:topic/images").get(get_image_list);
-    app.at("/:topic/tags").get(get_tag_list);
-    app.at("/:topic/new-tag").post(add_tag_to_topic);
-    app.at("/:topic/remove-tag").post(rm_tag_from_topic);
+    app.at("/{topic}/new-image").post(upload_image);
+    app.at("/{topic}/images").get(get_image_list);
+    app.at("/{topic}/tags").get(get_tag_list);
+    app.at("/{topic}/new-tag").post(add_tag_to_topic);
+    app.at("/{topic}/remove-tag").post(rm_tag_from_topic);
     app.at("/thumbnail/:name").get(get_image_thumbnail);
     app.at("/img/:name").get(get_image_full);
     app.at("/generate-key").get(generate_keys);
@@ -115,74 +106,71 @@ async fn main_async() -> tide::Result<()> {
 
     Ok(())
 }
+*/
 
-async fn generate_keys(req: Request<ServerState>) -> tide::Result {
+#[get("/generate-key")]
+async fn generate_keys() -> Result<HttpResponse> {
     let keypair = SigningKey::generate(&mut rand_core::OsRng);
     // Hash with sha512 for 64 bytes
     //let hash = sha3::Sha3_512::digest(&keypair.to_bytes());
     let encoded = base64::encode(&keypair.to_bytes());
 
-    let res = Response::builder(200)
-        .body(serde_json::to_string(&encoded)?)
-        .content_type(mime::JSON)
-        .build();
-
-    Ok(res)
+    Ok(HttpResponse::Ok().body(encoded))
 }
 
-async fn generate_challenge(mut req: Request<ServerState>) -> tide::Result {
+#[get("/generate-challenge")]
+async fn generate_challenge(
+    session: Session,
+) -> Result<HttpResponse> {
     let challenge: [u8; 32] = rand::random();
 
     // Store the challenge in the session
-    req.session_mut().insert("challenge", challenge.to_vec())?;
+    session.insert("challenge", challenge.to_vec())?;
 
     // Get the sid from the session
-    let sid = req.session().id();
-    log::info!("Session ID: {}", sid);
+    //let sid = session.id();
+    //info!("Session ID: {}", sid);
 
     let challenge = base64::encode(challenge);
 
-    let res = Response::builder(200)
-        .body(serde_json::to_string(&challenge)?)
-        .content_type(mime::JSON)
-        .build();
-
-    Ok(res)
+    Ok(HttpResponse::Ok().body(challenge))
 }
 
-async fn authenticate(mut req: Request<ServerState>) -> tide::Result {
-    let payload: VerificationPayload = req.body_json().await?;
+#[post("/authenticate")]
+async fn authenticate(
+    session: Session,
+    data: web::Data<ServerState>,
+    payload: web::Json<VerificationPayload>,
+) -> Result<HttpResponse> {
     let pubkey: [u8; 32] = payload.public_key[..].try_into()?;
     let public_key = VerifyingKey::from_bytes(&pubkey)?;
 
-    let sid = req.session().id();
-    log::info!("Session ID: {}", sid);
+    //let sid = req.session().id();
+    //info!("Session ID: {}", sid);
 
     // Check if the challenge in the session matches the provided challenge
-    let stored_challenge = req.session().get::<Vec<u8>>("challenge")
-        .ok_or(to_badreq(anyhow!("No challenge found in session!")))?;
+    let stored_challenge = session.get::<Vec<u8>>("challenge")?;
+        //.ok_or(anyhow!("No challenge found in session!"))?;
 
     // Remove the challenge from the session to ensure it can't be used again
-    req.session_mut().remove("challenge");
+    session.remove("challenge");
 
     let sig: [u8; 64] = payload.signature[..].try_into()?;
     let signature = Signature::from_bytes(&sig);
     if public_key.verify(&stored_challenge, &signature).is_ok() {
-        req.session_mut().insert("verified", true)?;
-        Ok(Response::new(StatusCode::Ok))
+        session.insert("verified", true)?;
+        Ok(HttpResponse::Ok().finish())
     } else {
-        Err(to_badreq(anyhow!("Signature is invalid!")))
+        Err(anyhow!("Signature is invalid!").into())
     }
-        /*
-    } else {
-        Err(to_badreq(anyhow!("No challenge found in session!")))
-    }
-        */
 }
 
-async fn get_index_list(req: Request<ServerState>) -> tide::Result {
-    let mut path = req.state().args.root_dir.clone();
-    let paths = get_index_paths(&path).await?;
+async fn get_index_list(
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let mut path = data.args.root_dir.clone();
+    let paths: Vec<PathBuf> = get_index_paths(&path).await
+        .map_err(|e| AnyError::from(e))?;
 
     // map to just the names
     let paths: Vec<String> = paths.iter()
@@ -191,63 +179,59 @@ async fn get_index_list(req: Request<ServerState>) -> tide::Result {
             .expect("can't convert index filestem to string").to_string())
         .collect();
 
-    let res = Response::builder(200)
-        .body(serde_json::to_string(&paths)?)
-        .content_type(mime::JSON)
-        .build();
-
-    Ok(res)
+    Ok(HttpResponse::Ok().json(paths))
 }
 
-async fn get_index(req: Request<ServerState>) -> tide::Result {
-    log::info!("get_index");
-    let name = normalize_topic(req.param("name")?);
-    let mut path = req.state().args.root_dir.clone();
+#[get("/tag/{name}")]
+async fn get_index(
+    webpath: web::Path<String>,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let name = normalize_topic(&webpath.into_inner());
+    let mut path = data.args.root_dir.clone();
     path.push("indexes");
     path.push(format!("{}.json", name));
 
     let index = smol::fs::read_to_string(path).await?;
 
-    let res = Response::builder(200)
-        .body(index)
-        .content_type(mime::JSON)
-        .build();
-
-    Ok(res)
+    Ok(HttpResponse::Ok().body(index))
 }
 
-async fn get_image_full(req: Request<ServerState>) -> tide::Result {
-    let name = req.param("name")?;
-    let mut path = req.state().args.root_dir.clone();
+#[get("/img/{name}")]
+async fn get_image_full(
+    webpath: web::Path<String>,
+    data: web::Data<ServerState>
+) -> Result<HttpResponse> {
+    let name = webpath.into_inner();
+    let mut path = data.args.root_dir.clone();
     path.push(name);
     let (image, mime) = get_image(&path).await?;
 
-    let res = Response::builder(200)
-        .body(image)
-        .header(tide::http::headers::ACCEPT_RANGES, "bytes")
-        .content_type(mime)
-        .build();
-
-    Ok(res)
+    Ok(HttpResponse::Ok()
+        .header("Accept-Ranges", "bytes")
+        .content_type(mime.to_string())
+        .body(image))
 }
 
-async fn get_image_thumbnail(req: Request<ServerState>) -> tide::Result {
-    let sid = req.session().id();
-    log::info!("Session ID: {}", sid);
-    let name = req.param("name")?;
-    let mut path = req.state().args.root_dir.clone();
+#[get("/thumbnail/{name}")]
+async fn get_image_thumbnail(
+    webpath: web::Path<String>,
+    data: web::Data<ServerState>
+) -> Result<HttpResponse> {
+    let name = webpath.into_inner();
+    //let sid = req.session().id();
+    //info!("Session ID: {}", sid);
+    //let name = req.param("name")?;
+    let mut path = data.args.root_dir.clone();
     // Use the thumbnail
     path.push("thumbnails");
     path.push(name);
     let (image, mime) = get_image(&path).await?;
 
-    let res = Response::builder(200)
-        .body(image)
-        .header(tide::http::headers::ACCEPT_RANGES, "bytes")
-        .content_type(mime)
-        .build();
-
-    Ok(res)
+    Ok(HttpResponse::Ok()
+        .header("Accept-Ranges", "bytes")
+        .content_type(mime.to_string())
+        .body(image))
 }
 
 async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Error> {
@@ -260,42 +244,58 @@ async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Err
     Ok((image, mime))
 }
 
-async fn rm_tag_from_topic(mut req: Request<ServerState>) -> tide::Result {
-    let topic = normalize_topic(req.param("topic")?);
-    let tag = req.body_json::<String>().await?;
+#[post("rm-tag/{topic}/{tag}")]
+async fn rm_tag_from_topic(
+    webpath: web::Path<(String, String)>,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let (topic, tag) = webpath.into_inner();
+    let topic = normalize_topic(topic);
+    rm_tag_for_topic(&data.args.root_dir, topic, tag).await?;
 
-    rm_tag_for_topic(&req.state().args.root_dir, topic, tag).await?;
-
-    Ok(Response::new(StatusCode::Ok))
+    Ok(HttpResponse::Ok().finish())
 }
 
-async fn add_tag_to_topic(mut req: Request<ServerState>) -> tide::Result {
-    let topic = normalize_topic(req.param("topic")?);
-    let tag = req.body_json::<String>().await?;
+#[post("new-tag/{topic}/{tag}")]
+async fn add_tag_to_topic(
+    webpath: web::Path<(String, String)>,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let (topic, tag) = webpath.into_inner();
+    let topic = normalize_topic(topic);
+    add_tag_for_topic(&data.args.root_dir, topic, tag).await?;
 
-    add_tag_for_topic(&req.state().args.root_dir, topic, tag).await?;
-
-    Ok(Response::new(StatusCode::Ok))
+    Ok(HttpResponse::Ok().finish())
 }
 
-async fn get_tag_list(req: Request<ServerState>) -> tide::Result<Body> {
-    let topic = normalize_topic(req.param("topic")?);
-    let mut path = req.state().args.root_dir.clone();
+#[get("{topic}/tags")]
+async fn get_tag_list(
+    webpath: web::Path<(String, String)>,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let topic = normalize_topic(webpath.into_inner());
+    let path = data.args.root_dir.clone();
 
     let tags = get_tags_for_topic(&mut path, &topic).await?;
-    Ok(Body::from_json(&tags)?)
+    //Ok(Body::from_json(&tags)?)
+    Ok(HttpResponse::Ok().json(tags))
 }
-async fn get_image_list(req: Request<ServerState>) -> tide::Result<Body> {
-    let topic = normalize_topic(req.param("topic")?);
-    let mut path = req.state().args.root_dir.clone();
+
+#[get("{topic}/images")]
+async fn get_image_list(
+    webpath: web::Path<(String, String)>,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let topic = normalize_topic(webpath.into_inner());
+    let mut path = data.args.root_dir.clone();
     path.push(format!("{}.json", topic));
 
     let image_list = image_list(path).await?;
-    Ok(Body::from_json(&image_list)?)
+    Ok(HttpResponse::Ok().json(image_list))
 }
 
 // TODO open with AcidJson to avoid concurrency issues
-async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
+async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
     // Read the TopicData file to get the image names
     let raw_topic_data = smol::fs::read(path).await?;
     let topic_data: TopicData = serde_json::from_slice(&raw_topic_data)?;
@@ -304,90 +304,34 @@ async fn image_list(path: PathBuf) -> tide::Result<Vec<MediaUid>> {
     Ok(image_names)
 }
 
-/// Uses the buffer to read the first 1MB of the file and hash it to get the uid
-pub async fn get_uid<T>(reader: &mut BufReader<T>) -> anyhow::Result<(String, Vec<u8>)>
-where T: AsyncRead + Unpin {
-    let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-
-    // read exactly 1MB or the whole buffer
-    let mut n = reader.read(&mut buffer).await?;
-    while n < buffer.len() {
-        let n2 = reader.read(&mut buffer[n..]).await?;
-        if n2 == 0 {
-            break;
-        }
-        n += n2;
-    }
-
-    // Hash the first 1MB for the uid
-    let uid = blake3::hash(&buffer).to_string();
-
-    Ok((uid, buffer))
-}
-
-/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
-/// the file as the uid, and the extension of the file.
-async fn save_media(
-    mut reader: BufReader<Body>,
-    root_dir: &PathBuf,
-    ext: &str,
-    thumbnail_sender: smol::channel::Sender<PathBuf>,
-) -> anyhow::Result<String> {
-    let (uid, mut buffer) = get_uid(&mut reader).await?;
-
-    // Generate path
-    let image_fname = format!("{}.{}", uid, ext);
-    let image_path = root_dir.join(&image_fname);
-
-    // Read and write the file
-    if !image_path.exists() {
-        let mut image_file = File::create(&image_path).await?;
-
-        // Write the first chunk
-        image_file.write_all(&buffer).await?;
-        image_file.flush().await?;
-
-        // Loop the rest
-        while let Ok(bytes_read) = reader.read(&mut buffer).await {
-            if bytes_read == 0 {
-                break;
-            }
-
-            let chunk = &buffer[..bytes_read];
-            image_file.write_all(chunk).await?;
-            image_file.flush().await?;
-        }
-
-        // Save thumbnail
-        thumbnail_sender.send(image_path.clone()).await?;
-    }
-
-    Ok(image_fname)
-}
-
-async fn upload_image(mut req: Request<ServerState>) -> tide::Result {
+#[post("{topic}/new-image")]
+async fn upload_image(
+    webpath: web::Path<(String, String)>,
+    mut req: HttpRequest,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let topic = normalize_topic(webpath.into_inner());
     let mime = req.content_type().ok_or(anyhow!("No content type"))?;
 
     // Invalid content type
     if mime.basetype() != "image"
             && mime.basetype() != "video" {
-        return Err(to_badreq(anyhow!("Invalid content type {}", mime.essence())));
+        return Err(anyhow!("Invalid content type {}", mime.essence()));
     }
 
     // Topic path
-    let topic = normalize_topic(req.param("topic")?);
-    let mut topic_path = req.state().args.root_dir.clone();
+    let mut topic_path = data.args.root_dir.clone();
     topic_path.push(format!("{}.json", topic));
 
     // Verify user
     let session = req.session();
     if session.get("verified") != Some(true) {
-        return Err(to_badreq(anyhow!("Not verified please authenticate.")));
+        return Err(anyhow!("Not verified please authenticate."));
     }
 
     // Add the image if its not already in the root dir
     let reader = smol::io::BufReader::new(req.take_body());
-    let root_dir = req.state().args.root_dir.clone();
+    let root_dir = data.args.root_dir.clone();
     let image_fname = save_media(
         reader,
         &root_dir,
@@ -409,12 +353,14 @@ async fn upload_image(mut req: Request<ServerState>) -> tide::Result {
         td.add(vec![image_fname]);
     }
 
-    Ok("Success".into())
+    Ok(HttpResponse::Ok().finish())
 }
 
-fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> tide::Error {
-    tide::Error::new(StatusCode::BadRequest, e)
+/*
+fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> Error {
+    Error::new(StatusCode::BadRequest, e)
 }
+*/
 
 fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
     match extension.as_ref() {
@@ -425,4 +371,22 @@ fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
         "mpeg" => Mime::from_str("video/mpeg").ok(),
         _ => Mime::from_extension(extension),
     }
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    HttpServer::new(|| {
+        App::new()
+            .wrap(
+                Cors::permissive()
+            )
+            .wrap(actix_web::middleware::Logger::default())
+            // TODO use a better session key and secure it
+            .wrap(actix_session::CookieSession::signed(&[0; 32]).secure(false))
+            .service(generate_challenge)
+            .service(authenticate)
+    })
+    .bind("localhost:2342")?
+    .run()
+    .await
 }

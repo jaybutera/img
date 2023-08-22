@@ -1,14 +1,11 @@
 use anyhow::Result;
 use std::path::PathBuf;
-use blocking::unblock;
 use smol::stream::StreamExt;
 use crate::types::{TopicData, Index};
-use smol::io::{AsyncReadExt, BufReader};
-use image::{io::Reader, imageops::FilterType};
 use std::collections::HashSet;
-use smol::io::AsyncWriteExt;
+use smol::io::{AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
 //use rand::rngs::OsRng;
-use tide::log;
+use std::fs::File;
 
 /// Get all topic file paths in the root directory
 pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
@@ -201,3 +198,65 @@ pub async fn rm_tag_for_topic(
 
     Ok(())
 }
+
+/// Uses the buffer to read the first 1MB of the file and hash it to get the uid
+pub async fn get_uid<T>(reader: &mut BufReader<T>) -> anyhow::Result<(String, Vec<u8>)>
+where T: AsyncRead + Unpin {
+    let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
+
+    // read exactly 1MB or the whole buffer
+    let mut n = reader.read(&mut buffer).await?;
+    while n < buffer.len() {
+        let n2 = reader.read(&mut buffer[n..]).await?;
+        if n2 == 0 {
+            break;
+        }
+        n += n2;
+    }
+
+    // Hash the first 1MB for the uid
+    let uid = blake3::hash(&buffer).to_string();
+
+    Ok((uid, buffer))
+}
+
+/// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
+/// the file as the uid, and the extension of the file.
+pub async fn save_media<T>(
+    mut reader: BufReader<T>,
+    root_dir: &PathBuf,
+    ext: &str,
+    thumbnail_sender: smol::channel::Sender<PathBuf>,
+) -> anyhow::Result<String> {
+    let (uid, mut buffer) = get_uid(&mut reader).await?;
+
+    // Generate path
+    let image_fname = format!("{}.{}", uid, ext);
+    let image_path = root_dir.join(&image_fname);
+
+    // Read and write the file
+    if !image_path.exists() {
+        let mut image_file = File::create(&image_path).await?;
+
+        // Write the first chunk
+        image_file.write_all(&buffer).await?;
+        image_file.flush().await?;
+
+        // Loop the rest
+        while let Ok(bytes_read) = reader.read(&mut buffer).await {
+            if bytes_read == 0 {
+                break;
+            }
+
+            let chunk = &buffer[..bytes_read];
+            image_file.write_all(chunk).await?;
+            image_file.flush().await?;
+        }
+
+        // Save thumbnail
+        thumbnail_sender.send(image_path.clone()).await?;
+    }
+
+    Ok(image_fname)
+}
+

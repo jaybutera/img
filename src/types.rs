@@ -2,12 +2,36 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use std::collections::HashSet;
-use tide::log;
+use log::info;
+use std::fmt::Display;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct HashVal([u8; 32]);
 
 pub type MediaUid = String;
+
+#[derive(Debug)]
+pub struct AnyError {
+    err: anyhow::Error,
+}
+
+impl actix_web::ResponseError for AnyError {
+    fn error_response(&self) -> actix_web::HttpResponse {
+        actix_web::HttpResponse::InternalServerError().body(self.err.to_string())
+    }
+}
+
+impl From<anyhow::Error> for AnyError {
+    fn from(err: anyhow::Error) -> Self {
+        Self { err }
+    }
+}
+
+impl::std::fmt::Display for AnyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.err)
+    }
+}
 
 /*
 impl std::fmt::Display for HashVal {
