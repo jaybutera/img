@@ -25,10 +25,17 @@ export async function authenticate(challenge: Uint8Array): Promise<void> {
             public_key: [...keypair.publicKey],
         }));
         */
+    console.log(JSON.stringify({
+            signature: [...sig],
+            public_key: [...pubKey],
+        }));
 
     const response = await fetch(`${img_server}/authenticate`, {
         method: 'POST',
         credentials: 'include',
+        headers: {
+            'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
             signature: [...sig],
             public_key: [...pubKey],
@@ -49,7 +56,6 @@ export async function get_challenge(): Promise<Uint8Array> {
         throw new Error(`Error getting challenge: ${response.status}`);
     }
     let encoded = await response.json();
-    console.log(encoded);
     const decoded = Buffer.from(encoded, 'base64');
     return decoded;
 }
@@ -115,8 +121,9 @@ export async function handle_file_upload(topic: string, files) {
 
 async function processFile(topic: string, file) {
     let response = await fetch(`${img_server}/${topic}/new-image`, {
-      method: 'POST',
-      body: file,
+        method: 'POST',
+        credentials: 'include',
+        body: file,
     });
     
     if (!response.ok) {

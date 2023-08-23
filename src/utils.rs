@@ -368,7 +368,8 @@ pub async fn save_file(
 ) -> anyhow::Result<String> {
     let mut hasher = Hasher::new();
     // First give it a random temp name
-    let file = File::create(rand_string()).await?;
+    let rand_name = format!("{}.tmp", rand_string());
+    let file = File::create(&rand_name).await?;
 
     // TODO limit chunk size
     let mut buf_writer = BufWriter::new(file);
@@ -388,10 +389,10 @@ pub async fn save_file(
     // Rename file
     let image_fname = format!("{}.{}", uid, ext);
     let image_path = root_dir.join(&image_fname);
-    smol::fs::rename(&image_fname, &image_path).await?;
+    smol::fs::rename(&rand_name, &image_path).await?;
 
     // Save thumbnail
     thumbnail_sender.send(image_path.clone()).await?;
 
-    Ok(uid)
+    Ok(image_fname)
 }

@@ -5,6 +5,10 @@
     import { goto } from "$app/navigation";
     import Uploading from '../../components/Uploading.svelte';
     import Modal from '../../components/Modal.svelte';
+    import ErrorMessage from '../../components/ErrorMessage.svelte';
+    import { createEventDispatcher } from 'svelte';
+    const dispatch = createEventDispatcher();
+
     export let data;
     const imgs = data.images;
     const topic = data.topic;
@@ -13,10 +17,16 @@
     let showModal = false;
 
     async function upload_file(event) {
-        let task = handle_file_upload(topic, selected_files);
-        not_uploading = false;
-        await task;
-        not_uploading = true;
+        try {
+            let task = handle_file_upload(topic, selected_files);
+            not_uploading = false;
+            await task;
+            not_uploading = true;
+        } catch (e) {
+            not_uploading = true;
+            console.error(e);
+            dispatch('app-error', { message: e.message });
+        }
         window.location.reload();
     }
 </script>
@@ -59,6 +69,7 @@
     <!-- Visible button that triggers the hidden input -->
     <a on:click={() => document.getElementById('file').click()}>Upload</a>
 </Nav>
+<ErrorMessage />
 
 {#if showModal}
     <Modal on:close={() => showModal = false}>

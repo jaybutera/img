@@ -21,6 +21,13 @@ use acidjson::AcidJson;
 use rand_core;
 use smol::stream::StreamExt;
 use structopt::StructOpt;
+use env_logger::Builder;
+use log::LevelFilter;
+use std::{env, io::Write};
+/*
+    time::{SystemTime, UNIX_EPOCH},
+};
+*/
 
 use crate::utils::{
     save_file,
@@ -158,43 +165,33 @@ async fn generate_challenge(
     session: Session,
 ) -> Result<HttpResponse> {
     let challenge: [u8; 32] = rand::random();
-
     // Store the challenge in the session
     session.insert("challenge", challenge.to_vec())?;
 
-    // Get the sid from the session
-    //let sid = session.id();
-    //info!("Session ID: {}", sid);
-
     let challenge = base64::encode(challenge);
-
-    Ok(HttpResponse::Ok().body(challenge))
+    Ok(HttpResponse::Ok().json(challenge))
 }
 
 #[post("/authenticate")]
 async fn authenticate(
     session: Session,
-    //data: web::Data<ServerState>,
     payload: web::Json<VerificationPayload>,
 ) -> Result<HttpResponse> {
+    // Check if the challenge in the session matches the provided challenge
+    let stored_challenge = session.get::<Vec<u8>>("challenge")?
+        .ok_or(AnyError::from(anyhow!("No challenge found in session!")))?;
+    // Remove the challenge from the session to ensure it can't be used again
+    session.remove("challenge");
+
     let pubkey: [u8; 32] = payload.public_key[..].try_into()
         .map_err(|_| AnyError::from(anyhow!("Invalid public key length!")))?;
     let public_key = VerifyingKey::from_bytes(&pubkey)
         .map_err(|_| AnyError::from(anyhow!("Invalid public key!")))?;
 
-    //let sid = req.session().id();
-    //info!("Session ID: {}", sid);
-
-    // Check if the challenge in the session matches the provided challenge
-    let stored_challenge = session.get::<Vec<u8>>("challenge")?
-        .ok_or(AnyError::from(anyhow!("No challenge found in session!")))?;
-
-    // Remove the challenge from the session to ensure it can't be used again
-    session.remove("challenge");
-
     let sig: [u8; 64] = payload.signature[..].try_into()
         .map_err(|_| AnyError::from(anyhow!("Invalid signature length!")))?;
     let signature = Signature::from_bytes(&sig);
+
     if public_key.verify(&stored_challenge, &signature).is_ok() {
         session.insert("verified", true)?;
         Ok(HttpResponse::Ok().finish())
@@ -203,6 +200,7 @@ async fn authenticate(
     }
 }
 
+/*
 async fn get_index_list(
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
@@ -219,6 +217,7 @@ async fn get_index_list(
 
     Ok(HttpResponse::Ok().json(paths))
 }
+*/
 
 #[get("/tag/{name}")]
 async fn get_index(
@@ -257,9 +256,6 @@ async fn get_image_thumbnail(
     data: web::Data<ServerState>
 ) -> Result<HttpResponse> {
     let name = webpath.into_inner();
-    //let sid = req.session().id();
-    //info!("Session ID: {}", sid);
-    //let name = req.param("name")?;
     let mut path = data.args.root_dir.clone();
     // Use the thumbnail
     path.push("thumbnails");
@@ -345,79 +341,15 @@ async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
     Ok(image_names)
 }
 
-/*
-#[post("{topic}/new-image")]
-async fn upload_image(
-    webpath: web::Path<String>,
-    session: Session,
-    mut req: HttpRequest,
-    payload: web::Json<Vec<u8>>,
-    data: web::Data<ServerState>,
-) -> Result<HttpResponse> {
-    let topic = normalize_topic(&webpath.into_inner());
-    //let mime = req.content_type().ok_or(anyhow!("No content type"))?;
-    use actix_web::http::header;
-    let mime = req.headers().get(header::CONTENT_TYPE)
-        .ok_or(AnyError::from(anyhow!("No content type")))?
-        .to_str().unwrap().parse::<mime::Mime>()
-        .map_err(|e| AnyError::from(e.into()))?;
-
-    // Invalid content type
-    if mime.basetype() != "image"
-            && mime.basetype() != "video" {
-        return Err(AnyError::from(anyhow!("Invalid content type {}", mime.essence())).into());
-    }
-
-    // Topic path
-    let mut topic_path = data.args.root_dir.clone();
-    topic_path.push(format!("{}.json", topic));
-
-    // Verify user
-    if session.get("verified") != Ok(Some(true)) {
-        return Err(AnyError::from(anyhow!("Not verified please authenticate.")).into());
-    }
-
-    // Add the image if its not already in the root dir
-    //let reader = smol::io::BufReader::new(req.take_body());
-    let reader = smol::io::BufReader::new(payload.into_inner());
-    let root_dir = data.args.root_dir.clone();
-    let image_fname = save_media(
-        reader,
-        &root_dir,
-        mime.subtype(),
-        data.thumbnail_sender.clone()).await
-            .map_err(|e| AnyError::from(e.into()))?;
-
-    // Create topic file if not already created
-    if !topic_path.exists() {
-        smol::fs::write(topic_path.clone(),
-                        serde_json::to_vec(&TopicData {
-                            name: topic,
-                            revs: vec![],
-                        }).unwrap()).await?;
-    }
-
-    { // Add media to topic
-        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
-            .map_err(|e| AnyError::from(e.into()))?;
-        let mut td = topic_file.write();
-        td.add(vec![image_fname]);
-    }
-
-    Ok(HttpResponse::Ok().finish())
-}
-*/
-
 #[post("{topic}/new-image")]
 async fn upload_image(
     req: HttpRequest,
-    //mut payload: Multipart,
     webpath: web::Path<String>,
-    //bytes: web::Bytes,
     payload: web::Payload,
     data: web::Data<ServerState>,
     session: Session,
 ) -> Result<HttpResponse> {
+    is_verified(&session)?;
     let topic = normalize_topic(&webpath.into_inner());
     let root_dir = data.args.root_dir.clone();
     // Get Content-Type header
@@ -442,10 +374,6 @@ async fn upload_image(
     // Topic path
     let mut topic_path = data.args.root_dir.clone();
     topic_path.push(format!("{}.json", topic));
-
-    // Verify user
-    session.get("verified")?
-        .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))?;
 
     // Add the image if its not already in the root dir
     let image_fname = save_file(
@@ -474,6 +402,13 @@ async fn upload_image(
     Ok(HttpResponse::Ok().body("Success"))
 }
 
+fn is_verified(session: &Session) -> Result<()> {
+    session.get("verified")?
+        .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))
+        .map(|v: bool| v == true)?;
+    Ok(())
+}
+
 
 /*
 fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> Error {
@@ -495,10 +430,24 @@ fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
+    /*
+    Builder::from_env(env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string()))
+        .format(|buf, record| {
+            writeln!(buf,
+                "{} [{}] - {}:{}: {}",
+                chrono::Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                record.level(),
+                record.file().unwrap_or("<unknown>"),
+                record.line().unwrap_or(0),
+                record.args()
+            )
+        })
+        .filter(None, LevelFilter::Debug)
+        .init();
+    */
 
     let args = Args::from_args();
     let port = args.port;
-    //log::start();
 
     // If migrate is true, run migrate function instead of starting server
     if args.migrate {
@@ -517,7 +466,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(Data::new(state.clone()))
-            //.wrap(middleware::Compress::default())
+            .wrap(actix_web::middleware::Compress::default())
             .wrap(Cors::permissive())
             .service(get_index)
             .service(upload_image)

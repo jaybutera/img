@@ -5,7 +5,7 @@
 
     onMount(() => {
         const handler = (e) => {
-            messages.push(e.detail);
+            messages.push(e);
         };
 
         document.addEventListener('app-error', handler);
@@ -17,6 +17,6 @@
 
 {#each messages as message (message.id)}
     <div class="error">
-        {message.text}
+        <h2>{message.text}</h2>
     </div>
 {/each}

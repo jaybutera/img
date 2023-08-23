@@ -3,6 +3,7 @@
     import { handle_file_upload } from "$lib/img.ts";
     import Nav from '../../components/Nav.svelte';
     import Uploading from '../../components/Uploading.svelte';
+    import ErrorMessage from '../../components/ErrorMessage.svelte';
     import { goto } from "$app/navigation";
     export let data;
     let not_uploading = true;
@@ -11,9 +12,14 @@
 
     async function upload_file(event) {
         // Get the file element
-        let task = handle_file_upload(topic, selected_files);
-        not_uploading = false;
-        await task;
+        try {
+            let task = handle_file_upload(topic, selected_files);
+            not_uploading = false;
+            await task;
+        } catch (e) {
+            console.error(e);
+            dispatch('app-error', { message: e.message });
+        }
         goto(`/${topic}`);
     }
 </script>
@@ -26,6 +32,7 @@
 </style>
 
 <Nav />
+<ErrorMessage />
 {#if not_uploading}
 <h1>Start a New Collection!</h1>
 <div class="vert-new-form">

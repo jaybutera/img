@@ -27,12 +27,11 @@
 
     async function auth() {
         // zeroed out uint8array for testing (32 bytes)
-        //let challenge = new Uint8Array(32);
-        // dispatch any thrown errors
         try {
             let challenge = await get_challenge();
             console.log('challenge', challenge);
             await authenticate(challenge, secret_key);
+            authenticated = true;
         } catch (e) {
             console.error(e);
             dispatch('error', { message: e.message });
