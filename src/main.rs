@@ -16,7 +16,8 @@ use acidjson::AcidJson;
 use rand_core;
 
 use crate::utils::{
-    save_media,
+    save_file,
+    //save_media,
     save_thumbnail,
     get_index_paths,
     get_tags_for_topic,
@@ -149,13 +150,14 @@ async fn authenticate(
     //info!("Session ID: {}", sid);
 
     // Check if the challenge in the session matches the provided challenge
-    let stored_challenge = session.get::<Vec<u8>>("challenge")?;
-        //.ok_or(anyhow!("No challenge found in session!"))?;
+    let stored_challenge = session.get::<Vec<u8>>("challenge")?
+        .ok_or(AnyError::from(anyhow!("No challenge found in session!")))?;
 
     // Remove the challenge from the session to ensure it can't be used again
     session.remove("challenge");
 
-    let sig: [u8; 64] = payload.signature[..].try_into()?;
+    let sig: [u8; 64] = payload.signature[..].try_into()
+        .map_err(|_| AnyError::from(anyhow!("Invalid signature length!")))?;
     let signature = Signature::from_bytes(&sig);
     if public_key.verify(&stored_challenge, &signature).is_ok() {
         session.insert("verified", true)?;
@@ -168,7 +170,7 @@ async fn authenticate(
 async fn get_index_list(
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
-    let mut path = data.args.root_dir.clone();
+    let path = data.args.root_dir.clone();
     let paths: Vec<PathBuf> = get_index_paths(&path).await
         .map_err(|e| AnyError::from(e))?;
 
@@ -250,8 +252,9 @@ async fn rm_tag_from_topic(
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
     let (topic, tag) = webpath.into_inner();
-    let topic = normalize_topic(topic);
-    rm_tag_for_topic(&data.args.root_dir, topic, tag).await?;
+    let topic = normalize_topic(&topic);
+    rm_tag_for_topic(&data.args.root_dir, topic, tag).await
+        .map_err(|e| AnyError::from(e))?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -262,31 +265,33 @@ async fn add_tag_to_topic(
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
     let (topic, tag) = webpath.into_inner();
-    let topic = normalize_topic(topic);
-    add_tag_for_topic(&data.args.root_dir, topic, tag).await?;
+    let topic = normalize_topic(&topic);
+    add_tag_for_topic(&data.args.root_dir, topic, tag).await
+        .map_err(|e| AnyError::from(e))?;
 
     Ok(HttpResponse::Ok().finish())
 }
 
 #[get("{topic}/tags")]
 async fn get_tag_list(
-    webpath: web::Path<(String, String)>,
+    webpath: web::Path<String>,
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
-    let topic = normalize_topic(webpath.into_inner());
+    let topic = normalize_topic(&webpath.into_inner());
     let path = data.args.root_dir.clone();
 
-    let tags = get_tags_for_topic(&mut path, &topic).await?;
-    //Ok(Body::from_json(&tags)?)
+    let tags = get_tags_for_topic(&path, &topic).await
+        .map_err(|e| AnyError::from(e))?;
+
     Ok(HttpResponse::Ok().json(tags))
 }
 
 #[get("{topic}/images")]
 async fn get_image_list(
-    webpath: web::Path<(String, String)>,
+    webpath: web::Path<String>,
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
-    let topic = normalize_topic(webpath.into_inner());
+    let topic = normalize_topic(&webpath.into_inner());
     let mut path = data.args.root_dir.clone();
     path.push(format!("{}.json", topic));
 
@@ -304,19 +309,27 @@ async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
     Ok(image_names)
 }
 
+/*
 #[post("{topic}/new-image")]
 async fn upload_image(
-    webpath: web::Path<(String, String)>,
+    webpath: web::Path<String>,
+    session: Session,
     mut req: HttpRequest,
+    payload: web::Json<Vec<u8>>,
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
-    let topic = normalize_topic(webpath.into_inner());
-    let mime = req.content_type().ok_or(anyhow!("No content type"))?;
+    let topic = normalize_topic(&webpath.into_inner());
+    //let mime = req.content_type().ok_or(anyhow!("No content type"))?;
+    use actix_web::http::header;
+    let mime = req.headers().get(header::CONTENT_TYPE)
+        .ok_or(AnyError::from(anyhow!("No content type")))?
+        .to_str().unwrap().parse::<mime::Mime>()
+        .map_err(|e| AnyError::from(e.into()))?;
 
     // Invalid content type
     if mime.basetype() != "image"
             && mime.basetype() != "video" {
-        return Err(anyhow!("Invalid content type {}", mime.essence()));
+        return Err(AnyError::from(anyhow!("Invalid content type {}", mime.essence())).into());
     }
 
     // Topic path
@@ -324,19 +337,20 @@ async fn upload_image(
     topic_path.push(format!("{}.json", topic));
 
     // Verify user
-    let session = req.session();
-    if session.get("verified") != Some(true) {
-        return Err(anyhow!("Not verified please authenticate."));
+    if session.get("verified") != Ok(Some(true)) {
+        return Err(AnyError::from(anyhow!("Not verified please authenticate.")).into());
     }
 
     // Add the image if its not already in the root dir
-    let reader = smol::io::BufReader::new(req.take_body());
+    //let reader = smol::io::BufReader::new(req.take_body());
+    let reader = smol::io::BufReader::new(payload.into_inner());
     let root_dir = data.args.root_dir.clone();
     let image_fname = save_media(
         reader,
         &root_dir,
         mime.subtype(),
-        req.state().thumbnail_sender.clone()).await?;
+        data.thumbnail_sender.clone()).await
+            .map_err(|e| AnyError::from(e.into()))?;
 
     // Create topic file if not already created
     if !topic_path.exists() {
@@ -348,13 +362,82 @@ async fn upload_image(
     }
 
     { // Add media to topic
-        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)?;
+        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
+            .map_err(|e| AnyError::from(e.into()))?;
         let mut td = topic_file.write();
         td.add(vec![image_fname]);
     }
 
     Ok(HttpResponse::Ok().finish())
 }
+*/
+
+#[post("{topic}/new-image")]
+async fn upload_image(
+    req: HttpRequest,
+    //mut payload: Multipart,
+    webpath: web::Path<String>,
+    //bytes: web::Bytes,
+    payload: web::Payload,
+    data: web::Data<ServerState>,
+    session: Session,
+) -> Result<HttpResponse> {
+    let topic = normalize_topic(&webpath.into_inner());
+    let root_dir = data.args.root_dir.clone();
+    // Get Content-Type header
+    let mime = req
+        .headers()
+        .get("Content-Type")
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("No content type"))?
+        .to_str()
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
+    let ext = mime::Mime::from_str(mime)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
+    let ext = ext.subtype();
+
+    // Invalid content type
+    if !mime.starts_with("image/") && !mime.starts_with("video/") {
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "Invalid content type {}",
+            mime
+        )));
+    }
+
+    // Topic path
+    let mut topic_path = data.args.root_dir.clone();
+    topic_path.push(format!("{}.json", topic));
+
+    // Verify user
+    session.get("verified")?
+        .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))?;
+
+    // Add the image if its not already in the root dir
+    let image_fname = save_file(
+        &root_dir,
+        payload,
+        ext,
+        data.thumbnail_sender.clone()).await
+            .map_err(|e| AnyError::from(e))?;
+
+    // Create topic file if not already created
+    if !topic_path.exists() {
+        smol::fs::write(topic_path.clone(),
+                        serde_json::to_vec(&TopicData {
+                            name: topic,
+                            revs: vec![],
+                        }).unwrap()).await?;
+    }
+
+    { // Add media to topic
+        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
+            .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
+        let mut td = topic_file.write();
+        td.add(vec![image_fname]);
+    }
+
+    Ok(HttpResponse::Ok().body("Success"))
+}
+
 
 /*
 fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> Error {

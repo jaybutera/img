@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use smol::stream::StreamExt;
 use crate::types::{TopicData, Index};
 use std::collections::HashSet;
-use smol::io::{AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
+use smol::io::{BufWriter, AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
 //use rand::rngs::OsRng;
-use std::fs::File;
+use smol::fs::File;
 
 /// Get all topic file paths in the root directory
 pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
@@ -26,7 +26,7 @@ pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
 pub async fn serialize_topics(topics: &Vec<PathBuf>) -> Result<Vec<TopicData>> {
     let mut topic_data = vec![];
     for topic in topics {
-        let mut file = smol::fs::File::open(&topic).await?;
+        let mut file = File::open(&topic).await?;
         let mut raw_json = vec![];
         file.read_to_end(&mut raw_json).await?;
         let topic: TopicData = serde_json::from_slice(&raw_json)?;
@@ -111,7 +111,7 @@ pub async fn get_tags_for_topic(
     let index_paths = get_index_paths(root_dir).await?;
     let mut tags = HashSet::new();
     for index_path in index_paths {
-        let mut file = smol::fs::File::open(&index_path).await?;
+        let mut file = File::open(&index_path).await?;
         let mut raw_json = vec![];
         file.read_to_end(&mut raw_json).await?;
 
@@ -142,7 +142,7 @@ pub async fn add_tag_for_topic(
 
     // Read the index if it exists, otherwise create it
     let mut index = if tag_path.exists() {
-        let mut file = smol::fs::File::open(&tag_path).await?;
+        let mut file = File::open(&tag_path).await?;
         let mut raw_json = vec![];
         file.read_to_end(&mut raw_json).await?;
         serde_json::from_slice(&raw_json)?
@@ -156,7 +156,7 @@ pub async fn add_tag_for_topic(
 
     // Write to a temporary {topic}.temp.json and then rename
     let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
-    let mut file = smol::fs::File::create(&temp_tag_path).await?;
+    let mut file = File::create(&temp_tag_path).await?;
     file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
     std::fs::rename(temp_tag_path, &tag_path.with_extension("json"))?;
 
@@ -175,7 +175,7 @@ pub async fn rm_tag_for_topic(
 
     // Read the index if it exists, otherwise fail
     let mut index: Index = if tag_path.exists() {
-        let mut file = smol::fs::File::open(&tag_path).await?;
+        let mut file = File::open(&tag_path).await?;
         let mut raw_json = vec![];
         file.read_to_end(&mut raw_json).await?;
         serde_json::from_slice(&raw_json)?
@@ -191,7 +191,7 @@ pub async fn rm_tag_for_topic(
     } else {
         // Write to a temporary {topic}.temp.json and then rename
         let temp_tag_path = tag_path.with_extension(format!("{}.temp.json", topic));
-        let mut file = smol::fs::File::create(&temp_tag_path).await?;
+        let mut file = File::create(&temp_tag_path).await?;
         file.write_all(serde_json::to_string(&index)?.as_bytes()).await?;
         std::fs::rename(temp_tag_path, &tag_path.with_extension("json"))?;
     }
@@ -222,6 +222,7 @@ where T: AsyncRead + Unpin {
 
 /// Saves media to the filesystem and return the filename which is the hash of first 1MB of 
 /// the file as the uid, and the extension of the file.
+/*
 pub async fn save_media<T>(
     mut reader: BufReader<T>,
     root_dir: &PathBuf,
@@ -259,4 +260,128 @@ pub async fn save_media<T>(
 
     Ok(image_fname)
 }
+*/
 
+
+
+// Separate --------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+/*
+use actix_web::web::Payload;
+use smol::io::AsyncBufRead;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use bytes::{Bytes, Buf};
+//use futures::StreamExt;
+
+pub struct PayloadReader {
+    payload: Payload,
+    buffer: Bytes,
+}
+
+impl PayloadReader {
+    pub fn new(payload: Payload) -> Self {
+        Self {
+            payload,
+            buffer: Bytes::new(),
+        }
+    }
+}
+
+impl AsyncRead for PayloadReader {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
+        if self.buffer.is_empty() {
+            match Pin::new(&mut self.payload).poll_next(cx) {
+                Poll::Ready(Some(Ok(chunk))) => {
+                    self.buffer = chunk;
+                },
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, e))),
+                Poll::Ready(None) => return Poll::Ready(Ok(0)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+
+        let len = std::cmp::min(buf.len(), self.buffer.len());
+        buf[0..len].copy_from_slice(&self.buffer[0..len]);
+        self.buffer.advance(len);
+
+        Poll::Ready(Ok(len))
+    }
+}
+
+impl AsyncBufRead for PayloadReader {
+    fn poll_fill_buf(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<&[u8]>> {
+        if self.buffer.is_empty() {
+            match Pin::new(&mut self.payload).poll_next(cx) {
+                Poll::Ready(Some(Ok(chunk))) => {
+                    self.buffer = chunk;
+                },
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, e))),
+                Poll::Ready(None) => return Poll::Ready(Ok(&[])),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+
+        Poll::Ready(Ok(&self.buffer))
+    }
+
+    fn consume(mut self: Pin<&mut Self>, amt: usize) {
+        self.buffer.advance(amt);
+    }
+}
+*/
+
+use blake3::{Hasher, OutputReader};
+//use hex_literal::hex;
+use rand::Rng;
+
+fn rand_string() -> String {
+    let mut rng = rand::thread_rng();
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                             abcdefghijklmnopqrstuvwxyz\
+                             0123456789";
+    // 34 to guanrantee no conflicts with other files
+    const PASSWORD_LEN: usize = 34;
+    let password: String = (0..PASSWORD_LEN)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect();
+    
+    password
+}
+
+pub async fn save_file(
+    root_dir: &PathBuf,
+    mut payload: actix_web::web::Payload,
+    ext: &str,
+    thumbnail_sender: smol::channel::Sender<PathBuf>,
+) -> anyhow::Result<String> {
+    let mut hasher = Hasher::new();
+    let file = File::create(rand_string()).await?;
+    let mut buf_writer = BufWriter::new(file);
+
+    while let Some(chunk) = payload.next().await {
+        let chunk = chunk?;
+        hasher.update(&chunk);
+        buf_writer.write_all(&chunk).await?;
+    }
+
+    buf_writer.flush().await?;
+
+    let mut hash_output = [0; 32];
+    hasher.finalize_xof().fill(&mut hash_output);
+
+    let uid = hex::encode(hash_output);
+
+    Ok(uid)
+}
