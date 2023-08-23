@@ -5,8 +5,13 @@ mod utils;
 use actix_session::Session;
 use actix_web::{web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
 use actix_cors::Cors;
-
-use types::{AnyError, VerificationPayload, ServerState, Index, TopicData, MediaUid};
+use types::{
+    AnyError,
+    VerificationPayload,
+    ServerState,
+    Args,
+    TopicData,
+    MediaUid};
 use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
 use std::str::FromStr;
@@ -14,6 +19,8 @@ use http_types::mime::{self, Mime};
 use std::path::PathBuf;
 use acidjson::AcidJson;
 use rand_core;
+use smol::stream::StreamExt;
+use structopt::StructOpt;
 
 use crate::utils::{
     save_file,
@@ -31,6 +38,33 @@ fn normalize_topic(topic: &str) -> String {
         .replace("%20", "-")
         .replace(".", "_")
         .trim().to_string()
+}
+
+/// Start the thumbnail generator process which generates for all files passed on the channel
+async fn thumbnail_generator(args: &Args) -> smol::channel::Sender<PathBuf> {
+    // Concurrently maintain a queue of thumbnails to generate,
+    // at most N at a time
+    let thumbnail_queue = async_channel::unbounded::<PathBuf>();
+    let thumbnail_queue_sender = thumbnail_queue.0.clone();
+    let mut thumbnail_queue_receiver = thumbnail_queue.1.clone();
+
+    let mut thumbnail_path = args.root_dir.clone();
+    thumbnail_path.push("thumbnails");
+
+    smol::spawn(async move {
+        while let Some(path) = thumbnail_queue_receiver.next().await {
+            let max_thumbnail_size = 500;
+            let res = save_thumbnail(
+                path.clone(), thumbnail_path.clone(),
+                max_thumbnail_size)
+                .await;
+            if let Err(e) = res {
+                log::error!("Error saving thumbnail: {}", e);
+            }
+        }
+    }).detach();
+
+    thumbnail_queue_sender
 }
 
 /*
@@ -140,11 +174,13 @@ async fn generate_challenge(
 #[post("/authenticate")]
 async fn authenticate(
     session: Session,
-    data: web::Data<ServerState>,
+    //data: web::Data<ServerState>,
     payload: web::Json<VerificationPayload>,
 ) -> Result<HttpResponse> {
-    let pubkey: [u8; 32] = payload.public_key[..].try_into()?;
-    let public_key = VerifyingKey::from_bytes(&pubkey)?;
+    let pubkey: [u8; 32] = payload.public_key[..].try_into()
+        .map_err(|_| AnyError::from(anyhow!("Invalid public key length!")))?;
+    let public_key = VerifyingKey::from_bytes(&pubkey)
+        .map_err(|_| AnyError::from(anyhow!("Invalid public key!")))?;
 
     //let sid = req.session().id();
     //info!("Session ID: {}", sid);
@@ -163,7 +199,7 @@ async fn authenticate(
         session.insert("verified", true)?;
         Ok(HttpResponse::Ok().finish())
     } else {
-        Err(anyhow!("Signature is invalid!").into())
+        Err(AnyError::from(anyhow!("Signature is invalid!")).into())
     }
 }
 
@@ -458,18 +494,47 @@ fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
+
+    let args = Args::from_args();
+    let port = args.port;
+    //log::start();
+
+    // If migrate is true, run migrate function instead of starting server
+    if args.migrate {
+        //generate_thumbnails(&args.root_dir).await?;
+        //update_media_names(&args.root_dir).await?;
+        return Ok(());
+    }
+
+    let thumbnail_sender = thumbnail_generator(&args).await;
+    let state = ServerState {
+        args: args.clone(),
+        thumbnail_sender,
+    };
+
+    use actix_web::web::Data;
+    HttpServer::new(move || {
         App::new()
-            .wrap(
-                Cors::permissive()
-            )
+            .app_data(Data::new(state.clone()))
+            //.wrap(middleware::Compress::default())
+            .wrap(Cors::permissive())
+            .service(get_index)
+            .service(upload_image)
+            .service(get_image_list)
+            .service(get_tag_list)
+            .service(add_tag_to_topic)
+            .service(rm_tag_from_topic)
+            .service(get_image_thumbnail)
+            .service(get_image_full)
+            .service(generate_keys)
+            .service(generate_challenge)
+            .service(authenticate)
             .wrap(actix_web::middleware::Logger::default())
             // TODO use a better session key and secure it
             .wrap(actix_session::CookieSession::signed(&[0; 32]).secure(false))
-            .service(generate_challenge)
-            .service(authenticate)
     })
-    .bind("localhost:2342")?
+    .bind(format!("localhost:{}", port))?
     .run()
     .await
 }

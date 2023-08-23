@@ -3,7 +3,6 @@ use structopt::StructOpt;
 use serde::{Serialize, Deserialize};
 use std::collections::HashSet;
 use log::info;
-use std::fmt::Display;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct HashVal([u8; 32]);
@@ -34,10 +33,9 @@ impl::std::fmt::Display for AnyError {
 }
 
 /*
-impl std::fmt::Display for HashVal {
-    // This trait requires `fmt` with this exact signature.
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
+impl AnyError {
+    pub fn anyhow(s: &str) -> Self {
+        AnyError::from(anyhow::anyhow!(s))
     }
 }
 */

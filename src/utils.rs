@@ -367,9 +367,11 @@ pub async fn save_file(
     thumbnail_sender: smol::channel::Sender<PathBuf>,
 ) -> anyhow::Result<String> {
     let mut hasher = Hasher::new();
+    // First give it a random temp name
     let file = File::create(rand_string()).await?;
-    let mut buf_writer = BufWriter::new(file);
 
+    // TODO limit chunk size
+    let mut buf_writer = BufWriter::new(file);
     while let Some(chunk) = payload.next().await {
         let chunk = chunk?;
         hasher.update(&chunk);
@@ -382,6 +384,14 @@ pub async fn save_file(
     hasher.finalize_xof().fill(&mut hash_output);
 
     let uid = hex::encode(hash_output);
+
+    // Rename file
+    let image_fname = format!("{}.{}", uid, ext);
+    let image_path = root_dir.join(&image_fname);
+    smol::fs::rename(&image_fname, &image_path).await?;
+
+    // Save thumbnail
+    thumbnail_sender.send(image_path.clone()).await?;
 
     Ok(uid)
 }
