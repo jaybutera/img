@@ -6,6 +6,7 @@ use actix_session::Session;
 use actix_web::{web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
 use actix_cors::Cors;
 use types::{
+    PublicKey,
     AnyError,
     VerificationPayload,
     ServerState,
@@ -21,19 +22,10 @@ use acidjson::AcidJson;
 use rand_core;
 use smol::stream::StreamExt;
 use structopt::StructOpt;
-use env_logger::Builder;
-use log::LevelFilter;
-use std::{env, io::Write};
-/*
-    time::{SystemTime, UNIX_EPOCH},
-};
-*/
 
 use crate::utils::{
     save_file,
-    //save_media,
     save_thumbnail,
-    get_index_paths,
     get_tags_for_topic,
     add_tag_for_topic,
     rm_tag_for_topic,
@@ -74,88 +66,10 @@ async fn thumbnail_generator(args: &Args) -> smol::channel::Sender<PathBuf> {
     thumbnail_queue_sender
 }
 
-/*
-async fn main_async() -> Result<()> {
-    let args = types::Args::from_args();
-    log::start();
-
-    // If migrate is true, run migrate function instead of starting server
-    if args.migrate {
-        generate_thumbnails(&args.root_dir).await?;
-        //update_media_names(&args.root_dir).await?;
-        return Ok(());
-    }
-
-    let port = args.port;
-
-    // Concurrently maintain a queue of thumbnails to generate,
-    // at most N at a time
-    let mut thumbnail_queue = async_channel::unbounded::<PathBuf>();
-    let mut thumbnail_queue_sender = thumbnail_queue.0.clone();
-    let mut thumbnail_queue_receiver = thumbnail_queue.1.clone();
-
-    let mut thumbnail_path = args.root_dir.clone();
-    thumbnail_path.push("thumbnails");
-
-    smol::spawn(async move {
-        while let Some(path) = thumbnail_queue_receiver.next().await {
-            let max_thumbnail_size = 500;
-            let res = save_thumbnail(
-                path.clone(), thumbnail_path.clone(),
-                max_thumbnail_size)
-                .await;
-            if let Err(e) = res {
-                log::error!("Error saving thumbnail: {}", e);
-            }
-        }
-    }).detach();
-
-
-    let state = ServerState {
-        args: args.clone(),
-        thumbnail_sender: thumbnail_queue_sender,
-    };
-
-    let mut app = with_state(state);
-    use http::cookies::SameSite;
-    let cors = CorsMiddleware::new()
-        .allow_methods("GET, POST, OPTIONS".parse::<HeaderValue>().unwrap())
-        //.allow_origin(Origin::from("*"))
-        .allow_origin(Origin::from("http://localhost:5173"))
-        .allow_credentials(true);
-    let sessions = sessions::SessionMiddleware::new(
-        sessions::MemoryStore::new(),
-        &"sessionasdfsdfsdfsdfsdfsdfsdfsdfsdfsdfsdf".to_string().into_bytes(),
-        //args.session_key.as_bytes(),
-    )
-    .with_same_site_policy(SameSite::Lax);
-    app.with(sessions);
-    app.with(cors);
-
-    app.at("/tag/:name").get(get_index);
-    //app.at("/all-indexes").get(get_index_list);
-    app.at("/{topic}/new-image").post(upload_image);
-    app.at("/{topic}/images").get(get_image_list);
-    app.at("/{topic}/tags").get(get_tag_list);
-    app.at("/{topic}/new-tag").post(add_tag_to_topic);
-    app.at("/{topic}/remove-tag").post(rm_tag_from_topic);
-    app.at("/thumbnail/:name").get(get_image_thumbnail);
-    app.at("/img/:name").get(get_image_full);
-    app.at("/generate-key").get(generate_keys);
-    app.at("/generate-challenge").get(generate_challenge);
-    app.at("/authenticate").post(authenticate);
-    app.listen(format!("0.0.0.0:{}", port)).await?;
-
-    Ok(())
-}
-*/
-
 #[get("/generate-key")]
 async fn generate_keys() -> Result<HttpResponse> {
-    let keypair = SigningKey::generate(&mut rand_core::OsRng);
-    // Hash with sha512 for 64 bytes
-    //let hash = sha3::Sha3_512::digest(&keypair.to_bytes());
-    let encoded = base64::encode(&keypair.to_bytes());
+    let secret = SigningKey::generate(&mut rand_core::OsRng);
+    let encoded = base64::encode(&secret.to_bytes());
 
     Ok(HttpResponse::Ok().body(encoded))
 }
@@ -183,9 +97,9 @@ async fn authenticate(
     // Remove the challenge from the session to ensure it can't be used again
     session.remove("challenge");
 
-    let pubkey: [u8; 32] = payload.public_key[..].try_into()
-        .map_err(|_| AnyError::from(anyhow!("Invalid public key length!")))?;
-    let public_key = VerifyingKey::from_bytes(&pubkey)
+    //let pubkey: PublicKey = payload.public_key[..].try_into()
+        //.map_err(|_| AnyError::from(anyhow!("Invalid public key length!")))?;
+    let public_key = VerifyingKey::from_bytes(&payload.public_key.to_bytes())
         .map_err(|_| AnyError::from(anyhow!("Invalid public key!")))?;
 
     let sig: [u8; 64] = payload.signature[..].try_into()
@@ -193,7 +107,7 @@ async fn authenticate(
     let signature = Signature::from_bytes(&sig);
 
     if public_key.verify(&stored_challenge, &signature).is_ok() {
-        session.insert("verified", true)?;
+        session.insert("verified_pubkey", payload.public_key.to_string())?;
         Ok(HttpResponse::Ok().finish())
     } else {
         Err(AnyError::from(anyhow!("Signature is invalid!")).into())
@@ -318,6 +232,23 @@ async fn get_tag_list(
     Ok(HttpResponse::Ok().json(tags))
 }
 
+#[get("{id}/{topic}/images")]
+async fn get_image_list_by_id(
+    webpath: web::Path<(String, String)>,
+    data: web::Data<ServerState>,
+) -> Result<HttpResponse> {
+    let (id, topic) = &webpath.into_inner();
+    let topic = normalize_topic(topic);
+
+    let mut path = data.args.root_dir.clone();
+    path.push(format!("{}.json", topic));
+
+    // Check that id matches beginning of pubkey in topic
+
+    let image_list = image_list(path).await?;
+    Ok(HttpResponse::Ok().json(image_list))
+}
+
 #[get("{topic}/images")]
 async fn get_image_list(
     webpath: web::Path<String>,
@@ -341,6 +272,39 @@ async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
     Ok(image_names)
 }
 
+#[post("{id}/{topic}/new-image")]
+async fn upload_image_by_id(
+    req: HttpRequest,
+    webpath: web::Path<(String, String)>,
+    payload: web::Payload,
+    data: web::Data<ServerState>,
+    session: Session,
+) -> Result<HttpResponse> {
+    let (id, topic) = &webpath.into_inner();
+    let topic = normalize_topic(topic);
+    let root_dir = data.args.root_dir.clone();
+
+    // Topic path
+    let mut topic_path = data.args.root_dir.clone();
+    topic_path.push(format!("{}.json", topic));
+
+    // If topic exists, get the owner
+    if topic_path.exists() {
+        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
+            .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
+        let td = topic_file.read();
+        if let Some(owner) = td.owner {
+            is_verified(&id, &owner.to_string(), &session)?;
+        } else {
+            return Err(AnyError::from(anyhow!("Topic {} is not owned", topic)).into());
+        }
+    } else {
+        return Err(AnyError::from(anyhow!("Topic {} does not exist", topic)).into());
+    };
+
+    upload_image(req, webpath, payload, data, session).await
+}
+
 #[post("{topic}/new-image")]
 async fn upload_image(
     req: HttpRequest,
@@ -349,7 +313,6 @@ async fn upload_image(
     data: web::Data<ServerState>,
     session: Session,
 ) -> Result<HttpResponse> {
-    is_verified(&session)?;
     let topic = normalize_topic(&webpath.into_inner());
     let root_dir = data.args.root_dir.clone();
     // Get Content-Type header
@@ -384,13 +347,16 @@ async fn upload_image(
             .map_err(|e| AnyError::from(e))?;
 
     // Create topic file if not already created
+    /*
     if !topic_path.exists() {
         smol::fs::write(topic_path.clone(),
                         serde_json::to_vec(&TopicData {
                             name: topic,
                             revs: vec![],
+                            owner: None,
                         }).unwrap()).await?;
     }
+    */
 
     { // Add media to topic
         let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
@@ -402,10 +368,27 @@ async fn upload_image(
     Ok(HttpResponse::Ok().body("Success"))
 }
 
-fn is_verified(session: &Session) -> Result<()> {
-    session.get("verified")?
-        .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))
-        .map(|v: bool| v == true)?;
+/// Check that the id, owner and session public key all match
+fn is_verified(
+    id: &str,
+    owner: &str,
+    session: &Session,
+) -> Result<()> {
+    // TODO all these should be gets or itll crash the server
+
+    // Owner should match id
+    if owner[..8] != id[..8] {
+        return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
+    }
+
+    // Session key should match id
+    let pubkey: String = session.get("verified_pubkey")?
+        .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))?;
+
+    if pubkey[..8] != id[..8] {
+        return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
+    }
+
     Ok(())
 }
 

@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 use structopt::StructOpt;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
+use acidjson::AcidJson;
+use anyhow::anyhow;
 use log::info;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
@@ -40,7 +42,66 @@ impl AnyError {
 }
 */
 
-pub type PublicKey = Vec<u8>;
+//pub type PublicKey = Vec<u8>;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicKey([u8; 32]);
+
+impl Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let b64_str = base64::encode(&self.0);
+        serializer.serialize_str(&b64_str)
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let b64_str = String::deserialize(deserializer)?;
+        let bytes = base64::decode(&b64_str).map_err(serde::de::Error::custom)?;
+
+        let mut array = [0; 32];
+        if bytes.len() != array.len() {
+            return Err(serde::de::Error::custom("Expected length 32"));
+        }
+        array.copy_from_slice(&bytes);
+        Ok(PublicKey(array))
+    }
+}
+
+impl PublicKey {
+    /*
+    pub fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn from_slice(bytes: &[u8]) -> Self {
+        let mut array = [0; 32];
+        array.copy_from_slice(&bytes);
+        Self(array)
+    }
+    */
+
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+    pub fn to_string(&self) -> String {
+        base64::encode(&self.0)
+    }
+}
+
+impl Into<PublicKey> for String {
+    fn into(self) -> PublicKey {
+        let bytes = base64::decode(&self).unwrap();
+        let mut array = [0; 32];
+        array.copy_from_slice(&bytes);
+        PublicKey(array)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct VerificationPayload {
@@ -74,9 +135,32 @@ pub struct TopicData {
     // A stack of revisions, each revision is an ordered list of specific revision operations
     /// A stack of revision operations
     pub revs: Vec<RevisionOp>,
+    pub owner: Option<PublicKey>,
 }
 
 impl TopicData {
+    // TODO this should open a read/write guard from acidjson?
+    pub async fn open_or_create(path: &PathBuf, owner: Option<PublicKey>) -> anyhow::Result<TopicData> {
+        if !path.exists() {
+            let td = TopicData {
+                name: path.file_name().unwrap().to_str().unwrap().to_string(),
+                revs: vec![],
+                owner,
+            };
+            smol::fs::write(
+                path,
+                serde_json::to_vec_pretty(&td)
+                    .expect("Failed to serialize topic data")).await?;
+
+            Ok(td)
+        } else {
+            //let td: AcidJson<TopicData> = AcidJson::open(&path)
+            //    .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
+            let file = smol::fs::read(path).await?;
+            let td: TopicData = serde_json::from_slice(&file)?;
+            Ok(td)
+        }
+    }
     pub fn contains(&self, media: &MediaUid) -> bool {
         // debug display the list
         self.list().contains(media)
