@@ -235,10 +235,12 @@ async fn get_tag_list(
     Ok(HttpResponse::Ok().json(tags))
 }
 
+#[cfg(feature = "multiplayer")]
 #[get("{id}/{topic}/images")]
 async fn get_image_list_by_id(
     webpath: web::Path<(String, String)>,
     data: web::Data<ServerState>,
+    session: Session,
 ) -> Result<HttpResponse> {
     let (id, topic) = &webpath.into_inner();
     let topic = normalize_topic(topic);
@@ -246,12 +248,15 @@ async fn get_image_list_by_id(
     let mut path = data.args.root_dir.clone();
     path.push(format!("{}.json", topic));
 
-    // Check that id matches beginning of pubkey in topic
+    let owner = get_topic_owner(&path)
+        .map_err(|e| AnyError::from(e))?;
+    is_verified(&id, &owner.to_string(), &session)?;
 
     let image_list = image_list(path).await?;
     Ok(HttpResponse::Ok().json(image_list))
 }
 
+#[cfg(not(feature = "multiplayer"))]
 #[get("{topic}/images")]
 async fn get_image_list(
     webpath: web::Path<String>,
