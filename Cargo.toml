@@ -36,3 +36,6 @@ bytes = "1.4.0"
 futures-util = "0.3.28"
 hex = "0.4.3"
 chrono = "0.4.26"
+
+[features]
+multiplayer = []

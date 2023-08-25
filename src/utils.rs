@@ -1,9 +1,13 @@
 use anyhow::Result;
 use std::path::PathBuf;
 use smol::stream::StreamExt;
-use crate::types::{TopicData, Index};
+use crate::types::{PublicKey, TopicData, Index};
 use std::collections::HashSet;
 use smol::io::{BufWriter, AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
+use http_types::mime::Mime;
+use std::str::FromStr;
+use anyhow::anyhow;
+use acidjson::AcidJson;
 //use rand::rngs::OsRng;
 use smol::fs::File;
 
@@ -395,4 +399,49 @@ pub async fn save_file(
     thumbnail_sender.send(image_path.clone()).await?;
 
     Ok(image_fname)
+}
+
+
+pub fn mime_and_ext(
+    req: &actix_web::HttpRequest,
+) -> Result<(Mime, String), actix_web::error::Error> {
+    // Get Content-Type header
+    let mime = req
+        .headers()
+        .get("Content-Type")
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("No content type"))?
+        .to_str()
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
+    let mime = Mime::from_str(mime)
+        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
+    let ext = mime.subtype().to_string();
+    Ok((mime, ext))
+}
+
+pub fn is_valid_media(mime: &Mime) -> Result<(), actix_web::error::Error> {
+    if mime.basetype() != "image" && mime.basetype() != "video" {
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "Invalid content type {}",
+            mime
+        )));
+    }
+    Ok(())
+}
+
+pub fn get_topic_owner(
+    topic_path: &PathBuf,
+) -> Result<PublicKey, anyhow::Error> {
+    let topic = topic_path.file_stem().unwrap().to_str().unwrap();
+    if topic_path.exists() {
+        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
+            .map_err(|e| anyhow!("{}", e))?;
+        let td = topic_file.read();
+        if let Some(ref owner) = td.owner {
+            Ok(owner.clone())
+        } else {
+            Err(anyhow!("Topic {} is not owned", topic))
+        }
+    } else {
+        Err(anyhow!("Topic {} does not exist", topic))
+    }
 }

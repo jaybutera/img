@@ -24,6 +24,9 @@ use smol::stream::StreamExt;
 use structopt::StructOpt;
 
 use crate::utils::{
+    get_topic_owner,
+    is_valid_media,
+    mime_and_ext,
     save_file,
     save_thumbnail,
     get_tags_for_topic,
@@ -272,6 +275,7 @@ async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
     Ok(image_names)
 }
 
+#[cfg(feature = "multiplayer")]
 #[post("{id}/{topic}/new-image")]
 async fn upload_image_by_id(
     req: HttpRequest,
@@ -284,55 +288,48 @@ async fn upload_image_by_id(
     let topic = normalize_topic(topic);
     let root_dir = data.args.root_dir.clone();
 
+    let (mime, ext) = mime_and_ext(&req)?;
+    is_valid_media(&mime)?;
+
     // Topic path
     let mut topic_path = data.args.root_dir.clone();
     topic_path.push(format!("{}.json", topic));
 
-    // If topic exists, get the owner
-    if topic_path.exists() {
+    // If topic exists, verify the owner
+    let owner = get_topic_owner(&topic_path)
+        .map_err(|e| AnyError::from(e))?;
+    is_verified(&id, &owner.to_string(), &session)?;
+
+    // Add the image if its not already in the root dir
+    let image_fname = save_file(
+        &root_dir,
+        payload,
+        &ext,
+        data.thumbnail_sender.clone()).await
+            .map_err(|e| AnyError::from(e))?;
+
+    { // Add media to topic
         let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
             .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
-        let td = topic_file.read();
-        if let Some(owner) = td.owner {
-            is_verified(&id, &owner.to_string(), &session)?;
-        } else {
-            return Err(AnyError::from(anyhow!("Topic {} is not owned", topic)).into());
-        }
-    } else {
-        return Err(AnyError::from(anyhow!("Topic {} does not exist", topic)).into());
-    };
+        let mut td = topic_file.write();
+        td.add(vec![image_fname]);
+    }
 
-    upload_image(req, webpath, payload, data, session).await
+    Ok(HttpResponse::Ok().body("Success"))
 }
 
+#[cfg(not(feature = "multiplayer"))]
 #[post("{topic}/new-image")]
 async fn upload_image(
     req: HttpRequest,
     webpath: web::Path<String>,
     payload: web::Payload,
     data: web::Data<ServerState>,
-    session: Session,
 ) -> Result<HttpResponse> {
     let topic = normalize_topic(&webpath.into_inner());
     let root_dir = data.args.root_dir.clone();
-    // Get Content-Type header
-    let mime = req
-        .headers()
-        .get("Content-Type")
-        .ok_or_else(|| actix_web::error::ErrorBadRequest("No content type"))?
-        .to_str()
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
-    let ext = mime::Mime::from_str(mime)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
-    let ext = ext.subtype();
-
-    // Invalid content type
-    if !mime.starts_with("image/") && !mime.starts_with("video/") {
-        return Err(actix_web::error::ErrorBadRequest(format!(
-            "Invalid content type {}",
-            mime
-        )));
-    }
+    let (mime, ext) = mime_and_ext(&req)?;
+    is_valid_media(&mime)?;
 
     // Topic path
     let mut topic_path = data.args.root_dir.clone();
@@ -342,12 +339,11 @@ async fn upload_image(
     let image_fname = save_file(
         &root_dir,
         payload,
-        ext,
+        &ext,
         data.thumbnail_sender.clone()).await
             .map_err(|e| AnyError::from(e))?;
 
     // Create topic file if not already created
-    /*
     if !topic_path.exists() {
         smol::fs::write(topic_path.clone(),
                         serde_json::to_vec(&TopicData {
@@ -356,7 +352,6 @@ async fn upload_image(
                             owner: None,
                         }).unwrap()).await?;
     }
-    */
 
     { // Add media to topic
         let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
@@ -377,7 +372,7 @@ fn is_verified(
     // TODO all these should be gets or itll crash the server
 
     // Owner should match id
-    if owner[..8] != id[..8] {
+    if owner[..8] != id[..] {
         return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
     }
 
@@ -385,7 +380,7 @@ fn is_verified(
     let pubkey: String = session.get("verified_pubkey")?
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))?;
 
-    if pubkey[..8] != id[..8] {
+    if pubkey[..8] != id[..] {
         return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
     }
 
