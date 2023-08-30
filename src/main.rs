@@ -16,12 +16,13 @@ use types::{
 use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
 use std::str::FromStr;
-use http_types::mime::{self, Mime};
 use std::path::PathBuf;
 use acidjson::AcidJson;
+use mime::Mime;
 use rand_core;
 use smol::stream::StreamExt;
 use structopt::StructOpt;
+use actix_multipart::{form::tempfile::TempFile, Field, Multipart};
 
 use crate::utils::{
     get_topic_owner,
@@ -323,30 +324,58 @@ async fn upload_image_by_id(
     Ok(HttpResponse::Ok().body("Success"))
 }
 
+/*
+#[derive(Debug, MultipartForm)]
+struct Upload {
+    files: Vec<TempFile>,
+}
+*/
+
+//use actix_multipart::form::MultipartForm;
 #[cfg(not(feature = "multiplayer"))]
 #[post("{topic}/new-image")]
 async fn upload_image(
     req: HttpRequest,
     webpath: web::Path<String>,
     payload: web::Payload,
+    //mut payload: MultipartForm<Upload>,
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
     let topic = normalize_topic(&webpath.into_inner());
     let root_dir = data.args.root_dir.clone();
-    let (mime, ext) = mime_and_ext(&req)?;
-    is_valid_media(&mime)?;
 
     // Topic path
     let mut topic_path = data.args.root_dir.clone();
     topic_path.push(format!("{}.json", topic));
 
-    // Add the image if its not already in the root dir
-    let image_fname = save_file(
-        &root_dir,
-        payload,
-        &ext,
-        data.thumbnail_sender.clone()).await
-            .map_err(|e| AnyError::from(e))?;
+    log::debug!("Topic path: {:?}", topic_path);
+    let mut writer_tasks = vec![];
+    //while let Ok(Some(field)) = payload.files.try_next().await {
+    //while let Some(file) = payload.files.iter().next() {
+        //let (mime, ext) = mime_and_ext(&field)?;
+        let mime = file.content_type.clone()
+            .ok_or_else(|| anyhow!("No content type"))?;
+        let ext = mime.subtype().as_str();
+        log::debug!("Mime: {:?}, ext: {:?}", mime, ext);
+        is_valid_media(&mime)?;
+
+        // Add the image if its not already in the root dir
+        let task = save_file(
+            &root_dir,
+            field,
+            ext,
+            data.thumbnail_sender.clone());
+                //.map_err(|e| AnyError::from(e))?;
+        writer_tasks.push(task);
+    }
+
+    log::debug!("{:?} tasks", writer_tasks.len());
+    /*
+    let image_fnames = futures_util::future::join_all(writer_tasks).await
+        .into_iter()
+        .collect::<anyhow::Result<String>>()
+        .map_err(|e| AnyError::from(e))?;
+    */
 
     // Create topic file if not already created
     if !topic_path.exists() {
@@ -362,11 +391,24 @@ async fn upload_image(
         let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
             .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
         let mut td = topic_file.write();
-        td.add(vec![image_fname]);
+        td.add(vec![image_fnames]);
     }
 
     Ok(HttpResponse::Ok().body("Success"))
 }
+
+/*
+async fn multipart_guard(req: HttpRequest, srv: &actix_web::web::ServiceRequest) -> Result<actix_service::Either<HttpResponse, HttpRequest>, Error> {
+    if let Some(content_type) = req.headers().get("content-type") {
+        if let Ok(content_type_str) = content_type.to_str() {
+            if content_type_str.starts_with("multipart/form-data") {
+                return Ok(actix_service::Either::B(req));
+            }
+        }
+    }
+    Ok(actix_service::Either::A(req.error_response(HttpResponse::BadRequest().body("Invalid content type"))))
+}
+*/
 
 /// Check that the id, owner and session public key all match
 fn is_verified(
@@ -406,7 +448,7 @@ fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
         "jpg" => Mime::from_str("image/jpeg").ok(),
         "mp4" => Mime::from_str("video/mp4").ok(),
         "mpeg" => Mime::from_str("video/mpeg").ok(),
-        _ => Mime::from_extension(extension),
+        _ => None,//Mime::from_extension(extension),
     }
 }
 

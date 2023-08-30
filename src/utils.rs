@@ -4,8 +4,9 @@ use smol::stream::StreamExt;
 use crate::types::{PublicKey, TopicData, Index};
 use std::collections::HashSet;
 use smol::io::{BufWriter, AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
-use http_types::mime::Mime;
-use std::str::FromStr;
+//use http_types::mime::Mime;
+use mime::Mime;
+//use std::str::FromStr;
 use anyhow::anyhow;
 use acidjson::AcidJson;
 //use rand::rngs::OsRng;
@@ -61,6 +62,11 @@ pub async fn save_thumbnail(
     thumbnail_dir: PathBuf,
     thumbnail_max_size: u32,
 ) -> anyhow::Result<()> {
+    // If thumbnail_dir doesn't exist, create it
+    if !thumbnail_dir.exists() {
+        smol::fs::create_dir(&thumbnail_dir).await?;
+    }
+
     let media_file1 = media_file.clone();
     smol::unblock(move || {
         let img = image::open(&media_file)?;
@@ -78,7 +84,7 @@ pub async fn save_thumbnail(
         let metadata = rexiv2::Metadata::new_from_path(&media_file)?;
         
         // Load the temporary thumbnail image and apply the metadata
-        let mut output_metadata = rexiv2::Metadata::new_from_path(&output_path)?;
+        let output_metadata = rexiv2::Metadata::new_from_path(&output_path)?;
         output_metadata.set_orientation(metadata.get_orientation());
         output_metadata.save_to_file(&output_path)
             .map_err(|e| anyhow::anyhow!("Error saving thumbnail metadata: {:?}", e))
@@ -86,7 +92,7 @@ pub async fn save_thumbnail(
         // Rename the temp thumbnail to the final thumbnail path
         //std::fs::rename(temp_output_path, &output_path)?;
     }).await
-    .map_err(|e| anyhow::anyhow!("Error saving thumbnail [{media_file1:?}]: {:?}", e))
+    .map_err(|e| anyhow::anyhow!("Error saving thumbnail for [{media_file1:?}]: {:?}", e))
 }
 
 /// List all index files in the root/indexes directory
@@ -367,6 +373,7 @@ fn rand_string() -> String {
 pub async fn save_file(
     root_dir: &PathBuf,
     mut payload: actix_web::web::Payload,
+    //mut payload: actix_multipart::Field,
     ext: &str,
     thumbnail_sender: smol::channel::Sender<PathBuf>,
 ) -> anyhow::Result<String> {
@@ -374,15 +381,18 @@ pub async fn save_file(
     // First give it a random temp name
     let rand_name = format!("{}.tmp", rand_string());
     let file = File::create(&rand_name).await?;
+    log::info!("Saving file to {}", rand_name);
 
     // TODO limit chunk size
     let mut buf_writer = BufWriter::new(file);
     while let Some(chunk) = payload.next().await {
-        let chunk = chunk?;
+        let chunk = chunk
+            .map_err(|e| anyhow::anyhow!("Error reading payload: {}", e))?;
         hasher.update(&chunk);
         buf_writer.write_all(&chunk).await?;
     }
 
+    log::info!("Flushing file {}", rand_name);
     buf_writer.flush().await?;
 
     let mut hash_output = [0; 32];
@@ -403,23 +413,17 @@ pub async fn save_file(
 
 
 pub fn mime_and_ext(
-    req: &actix_web::HttpRequest,
+    field: &actix_multipart::Field,
 ) -> Result<(Mime, String), actix_web::error::Error> {
-    // Get Content-Type header
-    let mime = req
-        .headers()
-        .get("Content-Type")
-        .ok_or_else(|| actix_web::error::ErrorBadRequest("No content type"))?
-        .to_str()
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
-    let mime = Mime::from_str(mime)
-        .map_err(|_| actix_web::error::ErrorBadRequest("Invalid content type"))?;
+    let mime = field
+        .content_type()
+        .ok_or_else(|| actix_web::error::ErrorBadRequest("No content type"))?;
     let ext = mime.subtype().to_string();
-    Ok((mime, ext))
+    Ok((mime.clone(), ext))
 }
 
 pub fn is_valid_media(mime: &Mime) -> Result<(), actix_web::error::Error> {
-    if mime.basetype() != "image" && mime.basetype() != "video" {
+    if mime.type_() != "image" && mime.type_() != "video" {
         return Err(actix_web::error::ErrorBadRequest(format!(
             "Invalid content type {}",
             mime
