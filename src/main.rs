@@ -15,7 +15,6 @@ use types::{
     MediaUid};
 use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
-use std::str::FromStr;
 use std::path::PathBuf;
 use acidjson::AcidJson;
 use mime::Mime;
@@ -23,6 +22,7 @@ use rand_core;
 use smol::stream::StreamExt;
 use structopt::StructOpt;
 use actix_multipart::{form::tempfile::TempFile, Field, Multipart};
+use types::mimes::from_extension;
 
 use crate::utils::{
     get_topic_owner,
@@ -352,22 +352,25 @@ async fn upload_image(
     let mut writer_tasks = vec![];
     //while let Ok(Some(field)) = payload.files.try_next().await {
     //while let Some(file) = payload.files.iter().next() {
-        //let (mime, ext) = mime_and_ext(&field)?;
+    let (mime, ext) = mime_and_ext(&payload)?;
+    /*
         let mime = file.content_type.clone()
             .ok_or_else(|| anyhow!("No content type"))?;
         let ext = mime.subtype().as_str();
+    */
         log::debug!("Mime: {:?}, ext: {:?}", mime, ext);
         is_valid_media(&mime)?;
 
         // Add the image if its not already in the root dir
         let task = save_file(
             &root_dir,
-            field,
-            ext,
+            //field,
+            payload,
+            &ext,
             data.thumbnail_sender.clone());
                 //.map_err(|e| AnyError::from(e))?;
         writer_tasks.push(task);
-    }
+    //}
 
     log::debug!("{:?} tasks", writer_tasks.len());
     /*
@@ -378,6 +381,7 @@ async fn upload_image(
     */
 
     // Create topic file if not already created
+    /*
     if !topic_path.exists() {
         smol::fs::write(topic_path.clone(),
                         serde_json::to_vec(&TopicData {
@@ -386,6 +390,8 @@ async fn upload_image(
                             owner: None,
                         }).unwrap()).await?;
     }
+    */
+    let tree = data.topic_db.open_tree(topic.as_bytes())?;
 
     { // Add media to topic
         let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
@@ -441,17 +447,6 @@ fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> Er
 }
 */
 
-fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
-    match extension.as_ref() {
-        "png" => Mime::from_str("image/png").ok(),
-        "jpeg" => Mime::from_str("image/jpeg").ok(),
-        "jpg" => Mime::from_str("image/jpeg").ok(),
-        "mp4" => Mime::from_str("video/mp4").ok(),
-        "mpeg" => Mime::from_str("video/mpeg").ok(),
-        _ => None,//Mime::from_extension(extension),
-    }
-}
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("debug"));
@@ -481,9 +476,12 @@ async fn main() -> std::io::Result<()> {
         return Ok(());
     }
 
+    let db = sled::open(&args.db_path).unwrap();
+
     let thumbnail_sender = thumbnail_generator(&args).await;
     let state = ServerState {
         args: args.clone(),
+        topic_db: db,
         thumbnail_sender,
     };
 

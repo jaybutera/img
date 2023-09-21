@@ -1,7 +1,10 @@
+mod mimes;
+
 use std::path::PathBuf;
 use structopt::StructOpt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
+use thiserror::Error;
 use acidjson::AcidJson;
 use anyhow::anyhow;
 use log::info;
@@ -103,6 +106,19 @@ impl Into<PublicKey> for String {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum ServerErr {
+    #[error("Error with topic database")]
+    TopicDbError(#[from] sled::Error),
+}
+
+impl actix_web::ResponseError for ServerErr {
+    fn error_response(&self) -> actix_web::HttpResponse {
+        actix_web::HttpResponse::InternalServerError().body(self.to_string())
+    }
+}
+
+
 #[derive(Serialize, Deserialize)]
 pub struct VerificationPayload {
     pub public_key: PublicKey,
@@ -112,6 +128,7 @@ pub struct VerificationPayload {
 #[derive(Clone)]
 pub struct ServerState {
     pub args: Args,
+    pub topic_db: sled::Db,
     pub thumbnail_sender: smol::channel::Sender<PathBuf>,
 }
 
@@ -124,6 +141,8 @@ pub struct Args {
     pub port: u32,
     #[structopt(short, long)]
     pub migrate: bool,
+    #[structopt(short, long, default_value = "./topic_db")]
+    pub db_path: PathBuf,
 }
 
 #[derive(Serialize, Deserialize)]

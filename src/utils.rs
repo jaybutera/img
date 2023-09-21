@@ -412,6 +412,7 @@ pub async fn save_file(
 }
 
 
+/*
 pub fn mime_and_ext(
     field: &actix_multipart::Field,
 ) -> Result<(Mime, String), actix_web::error::Error> {
@@ -421,6 +422,7 @@ pub fn mime_and_ext(
     let ext = mime.subtype().to_string();
     Ok((mime.clone(), ext))
 }
+*/
 
 pub fn is_valid_media(mime: &Mime) -> Result<(), actix_web::error::Error> {
     if mime.type_() != "image" && mime.type_() != "video" {

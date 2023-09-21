@@ -38,6 +38,8 @@ hex = "0.4.3"
 chrono = "0.4.26"
 actix-multipart = "0.6.0"
 mime = "0.3.17"
+sled = "0.34.7"
+thiserror = "1.0.47"
 
 [features]
 multiplayer = []
