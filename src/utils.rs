@@ -11,6 +11,10 @@ use anyhow::anyhow;
 use acidjson::AcidJson;
 //use rand::rngs::OsRng;
 use smol::fs::File;
+use crate::types::{
+    mimes::from_ext,
+    ServerErr,
+};
 
 /// Get all topic file paths in the root directory
 pub async fn get_topic_ids(root_dir: &PathBuf) -> Result<Vec<PathBuf>> {
@@ -370,13 +374,14 @@ fn rand_string() -> String {
     password
 }
 
+/// Fails if file already exists
 pub async fn save_file(
     root_dir: &PathBuf,
-    mut payload: actix_web::web::Payload,
-    //mut payload: actix_multipart::Field,
-    ext: &str,
+    //mut payload: actix_web::web::Payload,
+    mut payload: actix_multipart::Field,
+    ext: String,
     thumbnail_sender: smol::channel::Sender<PathBuf>,
-) -> anyhow::Result<String> {
+) -> Result<String, ServerErr> {
     let mut hasher = Hasher::new();
     // First give it a random temp name
     let rand_name = format!("{}.tmp", rand_string());
@@ -400,19 +405,24 @@ pub async fn save_file(
 
     let uid = hex::encode(hash_output);
 
-    // Rename file
+    // Check if file already exists
     let image_fname = format!("{}.{}", uid, ext);
     let image_path = root_dir.join(&image_fname);
+    if image_path.exists() {
+        return Err(ServerErr::CustomError(anyhow!("File already exists".to_string())));
+    }
+
+    // Rename file
     smol::fs::rename(&rand_name, &image_path).await?;
 
     // Save thumbnail
-    thumbnail_sender.send(image_path.clone()).await?;
+    thumbnail_sender.send(image_path.clone()).await
+        .map_err(|e| ServerErr::CustomError(anyhow!("Error sending thumbnail on channel: {}", e)))?;
 
     Ok(image_fname)
 }
 
 
-/*
 pub fn mime_and_ext(
     field: &actix_multipart::Field,
 ) -> Result<(Mime, String), actix_web::error::Error> {
@@ -422,7 +432,6 @@ pub fn mime_and_ext(
     let ext = mime.subtype().to_string();
     Ok((mime.clone(), ext))
 }
-*/
 
 pub fn is_valid_media(mime: &Mime) -> Result<(), actix_web::error::Error> {
     if mime.type_() != "image" && mime.type_() != "video" {
@@ -450,4 +459,24 @@ pub fn get_topic_owner(
     } else {
         Err(anyhow!("Topic {} does not exist", topic))
     }
+}
+
+/// Get extension of a pathbuf
+//pub fn ext(path: &web::Path<String>) -> Option<String> {
+pub fn ext(path: &PathBuf) -> Option<String> {
+    let ext = path.extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_lowercase());
+    ext
+}
+
+pub async fn get_image(path: &PathBuf)
+//-> Result<(Vec<u8>, mime::Mime), std::io::Error> {
+-> Result<(Vec<u8>, mime::Mime), ServerErr> {
+    let ext = ext(path)
+        .ok_or_else(|| ServerErr::FiletypeError("No extension".to_string()))?;
+    let mime = from_ext(ext)
+        .ok_or_else(|| ServerErr::FiletypeError("Invalid extension".to_string()))?;
+    let image = smol::fs::read(path).await?;
+    Ok((image, mime))
 }

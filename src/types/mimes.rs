@@ -1,6 +1,7 @@
+use std::str::FromStr;
 use mime::Mime;
 
-fn from_extension(extension: impl AsRef<str>) -> Option<Mime> {
+pub fn from_ext(extension: impl AsRef<str>) -> Option<Mime> {
     match extension.as_ref() {
         "png" => Mime::from_str("image/png").ok(),
         "jpeg" => Mime::from_str("image/jpeg").ok(),

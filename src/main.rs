@@ -22,12 +22,17 @@ use rand_core;
 use smol::stream::StreamExt;
 use structopt::StructOpt;
 use actix_multipart::{form::tempfile::TempFile, Field, Multipart};
-use types::mimes::from_extension;
+use types::{
+    mimes::from_ext,
+    ServerErr,
+};
 
 use crate::utils::{
-    get_topic_owner,
-    is_valid_media,
     mime_and_ext,
+    get_image,
+    ext,
+    //get_topic_owner,
+    is_valid_media,
     save_file,
     save_thumbnail,
     get_tags_for_topic,
@@ -186,16 +191,6 @@ async fn get_image_thumbnail(
         .body(image))
 }
 
-async fn get_image(path: &PathBuf) -> Result<(Vec<u8>, mime::Mime), std::io::Error> {
-    let ext = path.extension()
-        .expect(&format!("Expected path {:?} to be a file but it has no extension", path))
-        .to_str().unwrap();
-    let mime = from_extension(ext)
-        .expect(&format!("Unsupported filetype {:?} is somehow being fetched", ext));
-    let image = smol::fs::read(path).await?;
-    Ok((image, mime))
-}
-
 #[post("rm-tag/{topic}/{tag}")]
 async fn rm_tag_from_topic(
     webpath: web::Path<(String, String)>,
@@ -331,13 +326,13 @@ struct Upload {
 }
 */
 
-//use actix_multipart::form::MultipartForm;
 #[cfg(not(feature = "multiplayer"))]
 #[post("{topic}/new-image")]
 async fn upload_image(
     req: HttpRequest,
     webpath: web::Path<String>,
-    payload: web::Payload,
+    //payload: web::Payload,
+    mut payload: Multipart,
     //mut payload: MultipartForm<Upload>,
     data: web::Data<ServerState>,
 ) -> Result<HttpResponse> {
@@ -349,56 +344,52 @@ async fn upload_image(
     topic_path.push(format!("{}.json", topic));
 
     log::debug!("Topic path: {:?}", topic_path);
+    
     let mut writer_tasks = vec![];
-    //while let Ok(Some(field)) = payload.files.try_next().await {
-    //while let Some(file) = payload.files.iter().next() {
-    let (mime, ext) = mime_and_ext(&payload)?;
-    /*
-        let mime = file.content_type.clone()
-            .ok_or_else(|| anyhow!("No content type"))?;
-        let ext = mime.subtype().as_str();
-    */
-        log::debug!("Mime: {:?}, ext: {:?}", mime, ext);
+    while let Ok(Some(field)) = payload.try_next().await {
+       /*
+       let content_disposition = field.content_disposition();
+
+        let filename = content_disposition
+            .get_filename()
+            .expect("Expected filename!");
+
+        use std::path::Path;
+        let ext = Path::new(filename)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown");
+
+        // Get extension from filename
+        let mime = from_ext(&ext)
+            .ok_or_else(|| ServerErr::InvalidExtension(ext.to_string()))?;
+       */
+        let (mime, ext) = mime_and_ext(&field)?;
         is_valid_media(&mime)?;
 
-        // Add the image if its not already in the root dir
+        // Add the image and fail if it already exists
         let task = save_file(
             &root_dir,
-            //field,
-            payload,
-            &ext,
+            field,
+            ext,
             data.thumbnail_sender.clone());
-                //.map_err(|e| AnyError::from(e))?;
+
         writer_tasks.push(task);
-    //}
-
-    log::debug!("{:?} tasks", writer_tasks.len());
-    /*
-    let image_fnames = futures_util::future::join_all(writer_tasks).await
-        .into_iter()
-        .collect::<anyhow::Result<String>>()
-        .map_err(|e| AnyError::from(e))?;
-    */
-
-    // Create topic file if not already created
-    /*
-    if !topic_path.exists() {
-        smol::fs::write(topic_path.clone(),
-                        serde_json::to_vec(&TopicData {
-                            name: topic,
-                            revs: vec![],
-                            owner: None,
-                        }).unwrap()).await?;
     }
-    */
-    let tree = data.topic_db.open_tree(topic.as_bytes())?;
 
-    { // Add media to topic
-        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
-            .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
-        let mut td = topic_file.write();
-        td.add(vec![image_fnames]);
+    // Wait for all files to save
+    let mut image_fnames = vec![];
+    for task in writer_tasks {
+        let fname = task.await?;
+        image_fnames.push(fname);
     }
+
+    // Write to topic
+    let bytes = data.topic_db.get(&topic)
+        .map_err(|e| ServerErr::from(e))?
+        .ok_or_else(|| ServerErr::TopicNotFound(topic.clone()))?;
+    let mut td: TopicData = serde_json::from_slice(bytes.as_ref())?;
+    td.add(image_fnames);
 
     Ok(HttpResponse::Ok().body("Success"))
 }
@@ -477,11 +468,12 @@ async fn main() -> std::io::Result<()> {
     }
 
     let db = sled::open(&args.db_path).unwrap();
+    let tree = db.open_tree("topic_db").unwrap();
 
     let thumbnail_sender = thumbnail_generator(&args).await;
     let state = ServerState {
         args: args.clone(),
-        topic_db: db,
+        topic_db: tree,
         thumbnail_sender,
     };
 

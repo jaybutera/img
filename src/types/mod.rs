@@ -1,4 +1,4 @@
-mod mimes;
+pub mod mimes;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -110,6 +110,16 @@ impl Into<PublicKey> for String {
 pub enum ServerErr {
     #[error("Error with topic database")]
     TopicDbError(#[from] sled::Error),
+    #[error("Error topic not found: `{0}`")]
+    TopicNotFound(String),
+    #[error("Filetype Error: `{0}`")]
+    FiletypeError(String),
+    #[error("IO Error: `{0}`")]
+    IOError(#[from] std::io::Error),
+    #[error("Error: `{0}`")]
+    InvalidExtension(String),
+    #[error("Error: `{0}`")]
+    CustomError(#[from] anyhow::Error),
 }
 
 impl actix_web::ResponseError for ServerErr {
@@ -128,7 +138,7 @@ pub struct VerificationPayload {
 #[derive(Clone)]
 pub struct ServerState {
     pub args: Args,
-    pub topic_db: sled::Db,
+    pub topic_db: sled::Tree,
     pub thumbnail_sender: smol::channel::Sender<PathBuf>,
 }
 
