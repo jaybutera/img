@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
+use crate::PublicKey;
 
 pub type MediaUid = String;
 
@@ -53,7 +54,7 @@ impl TopicData {
 
     pub fn rm(&mut self, media: Vec<MediaUid>) {
         // First remove any media that is already in the list
-        let mut media = media;
+        let media = media;
         self.revs.push(RevisionOp::Del(media));
     }
 
@@ -75,6 +76,49 @@ impl TopicData {
 pub struct Index {
     pub name: String,
     pub topics: HashSet<String>,
+}
+
+/// Topic ID associated with first 32 bits of public key
+pub struct OwnedTopicId {
+    pub topic: String,
+    pub owner_id: String,
+}
+
+impl OwnedTopicId {
+    pub fn to_string(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self)
+    }
+}
+
+impl Serialize for OwnedTopicId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        //let b64_owner_id = base64::encode(&self.owner_id);
+        let owner_id = self.owner_id.clone();
+        let topic = self.topic.clone();
+        serializer.serialize_str(&(topic + "." + owner_id.as_str()))
+    }
+}
+
+impl<'de> Deserialize<'de> for OwnedTopicId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Parse topic and owner_id from string delimited by '.'
+        let s = String::deserialize(deserializer)?;
+        let mut split = s.split('.');
+        let topic = split.next().ok_or(serde::de::Error::custom("Expected topic"))?;
+        let owner_id = split.next().ok_or(serde::de::Error::custom("Expected owner_id"))?;
+        //let owner_id = base64::decode(&owner_id).map_err(serde::de::Error::custom)?;
+
+        Ok(OwnedTopicId {
+            topic: topic.to_string(),
+            owner_id: owner_id.to_string(),
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq)]

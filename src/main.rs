@@ -6,13 +6,17 @@ use actix_session::Session;
 use actix_web::{web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
 use actix_cors::Cors;
 use types::{
-    PublicKey,
+    crypto::PublicKey,
     AnyError,
     VerificationPayload,
     ServerState,
     Args,
-    TopicData,
-    MediaUid};
+    topic::{
+        TopicData,
+        MediaUid,
+        OwnedTopicId,
+    },
+};
 use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
 use std::path::PathBuf;
@@ -22,15 +26,11 @@ use rand_core;
 use smol::stream::StreamExt;
 use structopt::StructOpt;
 use actix_multipart::{form::tempfile::TempFile, Field, Multipart};
-use types::{
-    mimes::from_ext,
-    ServerErr,
-};
+use types::ServerErr;
 
 use crate::utils::{
     mime_and_ext,
     get_image,
-    ext,
     get_topic_owner,
     is_valid_media,
     save_file,
@@ -292,17 +292,24 @@ async fn upload_image_by_id(
     let topic = normalize_topic(topic);
     let root_dir = data.args.root_dir.clone();
 
+    let topic_id = OwnedTopicId {
+        topic: topic.clone(),
+        owner_id: id.clone(),
+    }.to_string()?;
+    log::debug!("Topic id: {}", topic_id);
+
     while let Some(mut field) = payload.try_next().await? {
     let (mime, ext) = mime_and_ext(&field)?;
     is_valid_media(&mime)?;
 
     // Topic path
     let mut topic_path = data.args.root_dir.clone();
-    topic_path.push(format!("{}.json", topic));
+    topic_path.push(format!("{}.json", topic_id));
 
     // If topic exists, verify the owner
-    let owner = get_topic_owner(&topic_path)
-        .map_err(|e| AnyError::from(e))?;
+    //let owner = get_topic_owner(&topic_path)
+    //    .map_err(|e| AnyError::from(e))?;
+    let owner =
     is_verified(&id, &owner.to_string(), &session)?;
     log::debug!("Verified owner");
 
@@ -323,7 +330,7 @@ async fn upload_image_by_id(
     }
     */
     // Add media to topic db
-    let td = if let Some(bytes) = data.topic_db.get(&topic)
+    let td = if let Some(bytes) = data.topic_db.get(&topic_id)
         .map_err(|e| ServerErr::from(e))?
     {
         let mut td: TopicData = serde_json::from_slice(bytes.as_ref())?;
@@ -334,7 +341,7 @@ async fn upload_image_by_id(
     };
     let bytes = serde_json::to_vec(&td)?;
     // TODO key should be topic and owner id together
-    data.topic_db.insert(&topic, bytes)
+    data.topic_db.insert(&topic_id, bytes)
         .map_err(|e| ServerErr::from(e))?;
     }
 

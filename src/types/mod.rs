@@ -10,7 +10,7 @@ use thiserror::Error;
 //use acidjson::AcidJson;
 use anyhow::anyhow;
 use log::info;
-use crate::PublicKey;
+pub use crypto::PublicKey;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 pub struct HashVal([u8; 32]);

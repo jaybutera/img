@@ -1,12 +1,6 @@
-use crate::types::{Args, Index, TopicData, MediaUid};
-use anyhow::anyhow;
 use std::path::PathBuf;
-use structopt::StructOpt;
 use smol::io::AsyncWriteExt;
-use async_fs::File;
-use smol::io::{AsyncReadExt, BufReader};
 use smol::stream::StreamExt;
-use log::info;
 
 use crate::utils::{get_uid, get_topic_ids, serialize_topics, get_media_paths};
 
@@ -29,10 +23,9 @@ pub async fn update_media_names(root_dir: &PathBuf) -> anyhow::Result<()> {
             continue;
         }
 
-        let mut file = smol::fs::File::open(&path).await?;
+        let file = smol::fs::File::open(&path).await?;
         let mut reader = smol::io::BufReader::new(file);
-        let mut buffer = vec![0; 1024 * 1024]; // 1MB buffer
-        let (uid, mut buffer) = get_uid(&mut reader).await?;
+        let (uid, _) = get_uid(&mut reader).await?;
         let fname = format!("{}.{}", uid, ext);
 
         // Rename the file

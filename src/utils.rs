@@ -1,15 +1,18 @@
 use anyhow::Result;
 use std::path::PathBuf;
 use smol::stream::StreamExt;
-use crate::types::{PublicKey, TopicData, Index};
+use crate::types::{
+    crypto::PublicKey,
+    topic::{
+        TopicData,
+        Index
+    },
+};
 use std::collections::HashSet;
 use smol::io::{BufWriter, AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
-//use http_types::mime::Mime;
 use mime::Mime;
-//use std::str::FromStr;
 use anyhow::anyhow;
 use acidjson::AcidJson;
-//use rand::rngs::OsRng;
 use smol::fs::File;
 use crate::types::{
     mimes::from_ext,
