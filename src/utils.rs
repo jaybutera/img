@@ -425,10 +425,14 @@ pub async fn save_file(
 
 pub fn mime_and_ext(
     field: &actix_multipart::Field,
+    //req: &mut actix_web::HttpRequest,
 ) -> Result<(Mime, String), actix_web::error::Error> {
     let mime = field
         .content_type()
         .ok_or_else(|| actix_web::error::ErrorBadRequest("No content type"))?;
+    /*
+    let mime 
+    */
     let ext = mime.subtype().to_string();
     Ok((mime.clone(), ext))
 }

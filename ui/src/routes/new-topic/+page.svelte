@@ -4,11 +4,13 @@
     import Nav from '../../components/Nav.svelte';
     import Uploading from '../../components/Uploading.svelte';
     import ErrorMessage from '../../components/ErrorMessage.svelte';
+    import { createEventDispatcher } from 'svelte';
     import { goto } from "$app/navigation";
     export let data;
     let not_uploading = true;
     let selected_files;
     let topic;
+    const dispatch = createEventDispatcher();
 
     async function upload_file(event) {
         // Get the file element

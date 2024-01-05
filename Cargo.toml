@@ -26,7 +26,7 @@ ed25519-dalek = { version = "2.0.0", features = ["rand_core"] }
 base64 = "0.21.2"
 sha3 = "0.10.8"
 
-actix-web = "4"
+actix-web = "4.4"
 actix-session = "0.5"
 actix-rt = "2"
 actix-cors = "0.6"
@@ -42,4 +42,4 @@ sled = "0.34.7"
 thiserror = "1.0.47"
 
 [features]
-multiplayer = []
+#multiplayer = 

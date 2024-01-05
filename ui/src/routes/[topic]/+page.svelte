@@ -18,16 +18,17 @@
 
     async function upload_file(event) {
         try {
+            console.log(selected_files);
             let task = handle_file_upload(topic, selected_files);
             not_uploading = false;
             await task;
             not_uploading = true;
         } catch (e) {
-            not_uploading = true;
+            //not_uploading = true;
             console.error(e);
             dispatch('app-error', { message: e.message });
         }
-        window.location.reload();
+        //window.location.reload();
     }
 </script>
 
