@@ -1,6 +1,7 @@
 mod types;
 mod migrations;
 mod utils;
+mod session_key;
 
 use actix_session::Session;
 use actix_web::{web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
@@ -106,8 +107,6 @@ async fn authenticate(
     // Remove the challenge from the session to ensure it can't be used again
     session.remove("challenge");
 
-    //let pubkey: PublicKey = payload.public_key[..].try_into()
-        //.map_err(|_| AnyError::from(anyhow!("Invalid public key length!")))?;
     let public_key = VerifyingKey::from_bytes(&payload.public_key.to_bytes())
         .map_err(|_| AnyError::from(anyhow!("Invalid public key!")))?;
 
@@ -122,25 +121,6 @@ async fn authenticate(
         Err(AnyError::from(anyhow!("Signature is invalid!")).into())
     }
 }
-
-/*
-async fn get_index_list(
-    data: web::Data<ServerState>,
-) -> Result<HttpResponse> {
-    let path = data.args.root_dir.clone();
-    let paths: Vec<PathBuf> = get_index_paths(&path).await
-        .map_err(|e| AnyError::from(e))?;
-
-    // map to just the names
-    let paths: Vec<String> = paths.iter()
-        .map(|p| p.file_stem()
-            .expect("index does not have a file stem").to_str()
-            .expect("can't convert index filestem to string").to_string())
-        .collect();
-
-    Ok(HttpResponse::Ok().json(paths))
-}
-*/
 
 #[get("/tag/{name}")]
 async fn get_index(
@@ -231,7 +211,6 @@ async fn get_tag_list(
     Ok(HttpResponse::Ok().json(tags))
 }
 
-//#[cfg(feature = "multiplayer")]
 #[get("{id}/{topic}/images")]
 async fn get_image_list_by_id(
     webpath: web::Path<(String, String)>,
@@ -265,22 +244,6 @@ async fn get_image_list_by_id(
 }
 
 /*
-#[cfg(not(feature = "multiplayer"))]
-#[get("{topic}/images")]
-async fn get_image_list(
-    webpath: web::Path<String>,
-    data: web::Data<ServerState>,
-) -> Result<HttpResponse> {
-    let topic = normalize_topic(&webpath.into_inner());
-    let mut path = data.args.root_dir.clone();
-    path.push(format!("{}.json", topic));
-
-    let image_list = image_list(path).await?;
-    Ok(HttpResponse::Ok().json(image_list))
-}
-*/
-
-// TODO open with AcidJson to avoid concurrency issues
 async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
     // Read the TopicData file to get the image names
     let raw_topic_data = smol::fs::read(path).await?;
@@ -289,13 +252,12 @@ async fn image_list(path: PathBuf) -> Result<Vec<MediaUid>> {
 
     Ok(image_names)
 }
+*/
 
-//#[cfg(feature = "multiplayer")]
 #[post("{id}/{topic}/new-image")]
 async fn upload_image_by_id(
     req: HttpRequest,
     webpath: web::Path<(String, String)>,
-    //payload: web::Payload,
     mut payload: Multipart,
     data: web::Data<ServerState>,
     session: Session,
@@ -311,182 +273,51 @@ async fn upload_image_by_id(
     log::debug!("Topic id: {}", topic_id);
 
     while let Some(mut field) = payload.try_next().await? {
-    let (mime, ext) = mime_and_ext(&field)?;
-    is_valid_media(&mime)?;
-
-    // Topic path
-    //let mut topic_path = data.args.root_dir.clone();
-    //topic_path.push(format!("{}.json", topic_id));
-
-    // If topic exists, verify the owner
-    //let owner = get_topic_owner(&topic_path)
-    //    .map_err(|e| AnyError::from(e))?;
-    is_verified(&id, &session)?;
-
-    // Add the image if its not already in the root dir
-    let image_fname = save_file(
-        &root_dir,
-        //payload,
-        field,
-        ext,
-        data.thumbnail_sender.clone()).await?;
-
-    /*
-    { // Add media to topic
-        let topic_file: AcidJson<TopicData> = AcidJson::open(&topic_path)
-            .map_err(|e| AnyError::from(anyhow!("{}", e)))?;
-        let mut td = topic_file.write();
-        td.add(vec![image_fname]);
-    }
-    */
-    // Add media to topic db
-    let td = if let Some(bytes) = data.topic_db.get(&topic_id)
-        .map_err(|e| ServerErr::from(e))?
-    {
-        let mut td: TopicData = serde_json::from_slice(bytes.as_ref())?;
-        td.add(vec![image_fname]);
-        td
-    } else {
-        TopicData::new(topic.clone(), None, vec![image_fname])
-    };
-    let bytes = serde_json::to_vec(&td)?;
-    // TODO key should be topic and owner id together
-    data.topic_db.insert(&topic_id, bytes)
-        .map_err(|e| ServerErr::from(e))?;
-    log::debug!("Added image with topic id: {}", topic_id);
-    }
-
-    Ok(HttpResponse::Ok().body("Success"))
-}
-
-/*
-#[derive(Debug, MultipartForm)]
-struct Upload {
-    files: Vec<TempFile>,
-}
-*/
-
-/*
-#[cfg(not(feature = "multiplayer"))]
-#[post("{topic}/new-image")]
-async fn upload_image(
-    //req: HttpRequest,
-    webpath: web::Path<String>,
-    payload: web::Payload,
-    //mut payload: Multipart,
-    //mut payload: MultipartForm<Upload>,
-    data: web::Data<ServerState>,
-) -> Result<HttpResponse> {
-    let topic = normalize_topic(&webpath.into_inner());
-    let root_dir = data.args.root_dir.clone();
-
-    // Topic path
-    let mut topic_path = data.args.root_dir.clone();
-    topic_path.push(format!("{}.json", topic));
-
-    log::debug!("Topic path: {:?}", topic_path);
-
-    //let mut writer_tasks = vec![];
-    //while let Some(field) = payload.try_next().await? {
-        log::debug!("Got field");
         let (mime, ext) = mime_and_ext(&field)?;
-        log::debug!("Mime: {:?}, ext: {:?}", mime, ext);
         is_valid_media(&mime)?;
+        is_verified(&id, &session)?;
 
-        // Add the image and fail if it already exists
-        let task = save_file(
+        // Add the image if its not already in the root dir
+        let image_fname = save_file(
             &root_dir,
             field,
             ext,
-            data.thumbnail_sender.clone());
+            data.thumbnail_sender.clone()).await?;
 
-        writer_tasks.push(task);
-        log::debug!("Added task");
-    //}
+        // Add media to topic db
+        let td = if let Some(bytes) = data.topic_db.get(&topic_id)
+            .map_err(|e| ServerErr::from(e))?
+        {
+            let mut td: TopicData = serde_json::from_slice(bytes.as_ref())?;
+            td.add(vec![image_fname]);
+            td
+        } else {
+            TopicData::new(topic.clone(), None, vec![image_fname])
+        };
+        let bytes = serde_json::to_vec(&td)?;
 
-    // Wait for all files to save
-    log::debug!("Waiting for all files to save");
-    /*
-    let mut image_fnames = vec![];
-    for task in writer_tasks {
-        let fname = task.await?;
-        image_fnames.push(fname);
+        data.topic_db.insert(&topic_id, bytes)
+            .map_err(|e| ServerErr::from(e))?;
     }
-    log::debug!("Fnames: {:?}", image_fnames.clone());
-
-    // Write to topic
-    let td = if let Some(bytes) = data.topic_db.get(&topic)
-        .map_err(|e| ServerErr::from(e))?
-    {
-        let mut td: TopicData = serde_json::from_slice(bytes.as_ref())?;
-        td.add(image_fnames);
-        td
-    } else {
-        TopicData::new(topic.clone(), None, image_fnames)
-    };
-
-    let bytes = serde_json::to_vec(&td)?;
-    data.topic_db.insert(&topic, bytes)
-        .map_err(|e| ServerErr::from(e))?;
-    */
 
     Ok(HttpResponse::Ok().body("Success"))
 }
-*/
-
-/*
-async fn multipart_guard(req: HttpRequest, srv: &actix_web::web::ServiceRequest) -> Result<actix_service::Either<HttpResponse, HttpRequest>, Error> {
-    if let Some(content_type) = req.headers().get("content-type") {
-        if let Ok(content_type_str) = content_type.to_str() {
-            if content_type_str.starts_with("multipart/form-data") {
-                return Ok(actix_service::Either::B(req));
-            }
-        }
-    }
-    Ok(actix_service::Either::A(req.error_response(HttpResponse::BadRequest().body("Invalid content type"))))
-}
-*/
 
 /// Check that the id, owner and session public key all match
 fn is_verified(
     id: &str,
-    //owner: &str,
     session: &Session,
 ) -> Result<()> {
-    /*
-    if id.len() != 8 || owner.len() < 8 {
-        return Err(actix_web::error::ErrorInternalServerError("Invalid id, owner, or pubkey length"));
-    }
-
-    // Owner should match id
-    if owner[..8] != id[..] {
-        return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
-    }
-    */
-
     // Session key should match id
     let pubkey: String = session.get("verified_pubkey")?
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))?;
-    //log::debug!("Pubkey: {}", pubkey);
-    //log::debug!("Id: {}", id);
 
-    /*
-    if pubkey.len() >= 8 && pubkey[..8] != id[..] {
-        return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
-    }
-    */
     // check pubkey matches id
     pubkey.eq(id)
         .then(|| ())
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("Verified public key for session does not match provided id"))
 }
 
-
-/*
-fn to_badreq<E: Into<anyhow::Error> + Send + 'static + Sync + Debug>(e: E) -> Error {
-    Error::new(StatusCode::BadRequest, e)
-}
-*/
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -528,6 +359,8 @@ async fn main() -> std::io::Result<()> {
         thumbnail_sender,
     };
 
+    let session_key = session_key::load_or_create_key();
+
     use actix_web::web::Data;
     HttpServer::new(move || {
         App::new()
@@ -547,7 +380,7 @@ async fn main() -> std::io::Result<()> {
             .service(authenticate)
             .wrap(actix_web::middleware::Logger::default())
             // TODO use a better session key and secure it
-            .wrap(actix_session::CookieSession::signed(&[0; 32]).secure(false))
+            .wrap(actix_session::CookieSession::signed(&session_key).secure(false))
     })
     .bind(format!("localhost:{}", port))?
     .run()

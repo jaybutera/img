@@ -12,7 +12,6 @@ use std::collections::HashSet;
 use smol::io::{BufWriter, AsyncRead, AsyncWriteExt, AsyncReadExt, BufReader};
 use mime::Mime;
 use anyhow::anyhow;
-use acidjson::AcidJson;
 use smol::fs::File;
 use crate::types::{
     mimes::from_ext,
