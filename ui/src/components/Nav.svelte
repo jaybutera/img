@@ -42,7 +42,7 @@
         <div class="flex-right">
             {#await get_pubkey() then public_key}
                 {#if public_key}
-                    <a>Public Key: {public_key.slice(0,8)}...</a>
+                    <a href="/import-key">Public Key: {public_key.slice(0,8)}...</a>
                 {:else}
                     <a href="/import-key">Login</a>
                 {/if}
