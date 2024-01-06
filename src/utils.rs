@@ -412,7 +412,8 @@ pub async fn save_file(
     let image_fname = format!("{}.{}", uid, ext);
     let image_path = root_dir.join(&image_fname);
     if image_path.exists() {
-        return Err(ServerErr::CustomError(anyhow!("File already exists".to_string())));
+        return Ok(image_fname);
+        //return Err(ServerErr::CustomError(anyhow!("File already exists".to_string())));
     }
 
     // Rename file
@@ -450,6 +451,7 @@ pub fn is_valid_media(mime: &Mime) -> Result<(), actix_web::error::Error> {
     Ok(())
 }
 
+/*
 pub fn get_topic_owner(
     topic_path: &PathBuf,
 ) -> Result<PublicKey, anyhow::Error> {
@@ -467,6 +469,7 @@ pub fn get_topic_owner(
         Err(anyhow!("Topic {} does not exist", topic))
     }
 }
+*/
 
 /// Get extension of a pathbuf
 //pub fn ext(path: &web::Path<String>) -> Option<String> {

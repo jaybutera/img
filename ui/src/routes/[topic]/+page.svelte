@@ -1,16 +1,18 @@
 <script>
     import Nav from "../../components/Nav.svelte";
     import TopicSettings from "../../components/TopicSettings.svelte";
-    import { img_server, handle_file_upload } from "$lib/img.ts";
+    import { get_image_names, img_server, handle_file_upload } from "$lib/img.ts";
     import { goto } from "$app/navigation";
     import Uploading from '../../components/Uploading.svelte';
     import Modal from '../../components/Modal.svelte';
     import ErrorMessage from '../../components/ErrorMessage.svelte';
     import { createEventDispatcher } from 'svelte';
+    import { onMount } from 'svelte';
     const dispatch = createEventDispatcher();
 
     export let data;
-    const imgs = data.images;
+    //const imgs = data.images;
+    let imgs = [];
     const topic = data.topic;
     let not_uploading = true;
     let selected_files;
@@ -30,6 +32,13 @@
         }
         //window.location.reload();
     }
+
+    onMount(() => {
+        imgs = get_image_names(topic).catch((e) => {
+            console.error(e);
+            dispatch('app-error', { message: e.message });
+        });
+    });
 </script>
 
 <style>
@@ -80,6 +89,9 @@
 
 {#if not_uploading}
 <div class="grid">
+    {#await imgs}
+        <p>loading...</p>
+    {:then imgs}
     {#each imgs as name (name)}
         {#if name.endsWith(".mp4")}
             <div class="media-container">
@@ -95,6 +107,9 @@
         </div>
         {/if}
     {/each}
+    {:catch error}
+        <p>error: {error.message}</p>
+    {/await}
 </div>
 {:else}
     <Uploading />

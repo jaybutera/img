@@ -95,7 +95,6 @@ impl Serialize for OwnedTopicId {
     where
         S: Serializer,
     {
-        //let b64_owner_id = base64::encode(&self.owner_id);
         let owner_id = self.owner_id.clone();
         let topic = self.topic.clone();
         serializer.serialize_str(&(topic + "." + owner_id.as_str()))
@@ -112,7 +111,6 @@ impl<'de> Deserialize<'de> for OwnedTopicId {
         let mut split = s.split('.');
         let topic = split.next().ok_or(serde::de::Error::custom("Expected topic"))?;
         let owner_id = split.next().ok_or(serde::de::Error::custom("Expected owner_id"))?;
-        //let owner_id = base64::decode(&owner_id).map_err(serde::de::Error::custom)?;
 
         Ok(OwnedTopicId {
             topic: topic.to_string(),

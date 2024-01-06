@@ -92,11 +92,13 @@ export async function get_tags(topic: string): Promise<string[]> {
 
 export async function get_image_names(topic: string): Promise<string[]> {
   try {
-    const pubkey = await get_pubkey();
-    const pkid = await pubkey_id(pubkey);
+    const pubkey = encodeURIComponent(await get_pubkey());
+    //const pkid = await pubkey_id(pubkey);
 
     // Make a GET request to the endpoint
-    const response = await fetch(`${img_server}/${pkid}/${topic}/images`);
+    const response = await fetch(`${img_server}/${pubkey}/${topic}/images`, {
+        credentials: 'include',
+    });
 
     // If the request was successful, parse the response as JSON
     if (response.ok) {
@@ -114,8 +116,8 @@ export async function get_image_names(topic: string): Promise<string[]> {
 }
 
 export async function handle_file_upload(topic: string, files) {
-    const pubkey = await get_pubkey();
-    const pkid = await pubkey_id(pubkey);
+    const pubkey = encodeURIComponent(await get_pubkey());
+    //const pkid = await pubkey_id(pubkey);
     /*
     // Wait for all files to upload
     let filePromises = Array.from(files)
@@ -131,7 +133,7 @@ export async function handle_file_upload(topic: string, files) {
     for (let pair of formData.entries()) {
         console.log(pair[0]+ ', ' + pair[1]);
     }
-    let response = await fetch(`${img_server}/${pkid}/${topic}/new-image`, {
+    let response = await fetch(`${img_server}/${pubkey}/${topic}/new-image`, {
         method: 'POST',
         credentials: 'include',
         body: formData,
@@ -148,11 +150,19 @@ export async function get_pubkey(): string {
     return pubKeyStr;
 }
 
-async function pubkey_id(pk: string): string {
-    const decoded = Buffer.from(pk, 'base64');
-    const pubKey = await ed.getPublicKeyAsync(decoded);
-    const pubKeyStr = Buffer.from(pubKey).toString('base64');
-    return pubKeyStr.slice(0, 8);
+export function save_privkey(privkey: string) {
+    if (privkey.length != 44) {
+        console.error('Private key is not 32 bytes long.');
+        dispatch('error', { message: 'Private key is not 32 bytes long.' });
+        throw new Error('Private key is not 32 bytes long.');
+    }
+    if (!privkey.match(/^[a-zA-Z0-9+/]+={0,2}$/)) {
+        console.error('Private key is not base64 encoded.');
+        dispatch('error', { message: 'Private key is not base64 encoded.' });
+        throw new Error('Private key is not base64 encoded.');
+    }
+
+    localStorage.setItem('private_key', privkey);
 }
 
 /*

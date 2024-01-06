@@ -31,7 +31,7 @@ use types::ServerErr;
 use crate::utils::{
     mime_and_ext,
     get_image,
-    get_topic_owner,
+    //get_topic_owner,
     is_valid_media,
     save_file,
     save_thumbnail,
@@ -238,17 +238,29 @@ async fn get_image_list_by_id(
     data: web::Data<ServerState>,
     session: Session,
 ) -> Result<HttpResponse> {
+    log::debug!("Getting image list");
     let (id, topic) = &webpath.into_inner();
     let topic = normalize_topic(topic);
 
-    let mut path = data.args.root_dir.clone();
-    path.push(format!("{}.json", topic));
+    is_verified(&id, &session)?;
+    log::debug!("Verified");
 
-    let owner = get_topic_owner(&path)
-        .map_err(|e| AnyError::from(e))?;
-    is_verified(&id, &owner.to_string(), &session)?;
+    let topic_id = OwnedTopicId {
+        topic: topic.clone(),
+        owner_id: id.clone(),
+    }.to_string()?;
+    log::debug!("Topic id: {}", topic_id);
+    let image_list = if let Some(bytes) = data.topic_db.get(&topic_id)
+        .map_err(|e| ServerErr::from(e))?
+    {
+        let td: TopicData = serde_json::from_slice(bytes.as_ref())?;
+        log::debug!("Topic data: {:?}", td.list());
+        td.list()
+    } else {
+        vec![]
+    };
+    log::debug!("Image list: {:?}", image_list);
 
-    let image_list = image_list(path).await?;
     Ok(HttpResponse::Ok().json(image_list))
 }
 
@@ -303,15 +315,13 @@ async fn upload_image_by_id(
     is_valid_media(&mime)?;
 
     // Topic path
-    let mut topic_path = data.args.root_dir.clone();
-    topic_path.push(format!("{}.json", topic_id));
+    //let mut topic_path = data.args.root_dir.clone();
+    //topic_path.push(format!("{}.json", topic_id));
 
     // If topic exists, verify the owner
     //let owner = get_topic_owner(&topic_path)
     //    .map_err(|e| AnyError::from(e))?;
-    let owner =
-    is_verified(&id, &owner.to_string(), &session)?;
-    log::debug!("Verified owner");
+    is_verified(&id, &session)?;
 
     // Add the image if its not already in the root dir
     let image_fname = save_file(
@@ -343,6 +353,7 @@ async fn upload_image_by_id(
     // TODO key should be topic and owner id together
     data.topic_db.insert(&topic_id, bytes)
         .map_err(|e| ServerErr::from(e))?;
+    log::debug!("Added image with topic id: {}", topic_id);
     }
 
     Ok(HttpResponse::Ok().body("Success"))
@@ -439,9 +450,10 @@ async fn multipart_guard(req: HttpRequest, srv: &actix_web::web::ServiceRequest)
 /// Check that the id, owner and session public key all match
 fn is_verified(
     id: &str,
-    owner: &str,
+    //owner: &str,
     session: &Session,
 ) -> Result<()> {
+    /*
     if id.len() != 8 || owner.len() < 8 {
         return Err(actix_web::error::ErrorInternalServerError("Invalid id, owner, or pubkey length"));
     }
@@ -450,16 +462,23 @@ fn is_verified(
     if owner[..8] != id[..] {
         return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
     }
+    */
 
     // Session key should match id
     let pubkey: String = session.get("verified_pubkey")?
         .ok_or_else(|| actix_web::error::ErrorInternalServerError("Not verified please authenticate"))?;
+    //log::debug!("Pubkey: {}", pubkey);
+    //log::debug!("Id: {}", id);
 
+    /*
     if pubkey.len() >= 8 && pubkey[..8] != id[..] {
         return Err(actix_web::error::ErrorInternalServerError("Verified public key does not match provided id"));
     }
-
-    Ok(())
+    */
+    // check pubkey matches id
+    pubkey.eq(id)
+        .then(|| ())
+        .ok_or_else(|| actix_web::error::ErrorInternalServerError("Verified public key for session does not match provided id"))
 }
 
 

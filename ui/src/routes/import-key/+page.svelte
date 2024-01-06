@@ -1,28 +1,17 @@
 <script>
     import Nav from "../../components/Nav.svelte";
     import { Buffer } from 'buffer';
-    import { get_challenge, authenticate, generate_key } from '$lib/img.ts';
+    import { save_privkey, get_challenge, authenticate, generate_key } from '$lib/img.ts';
     import { createEventDispatcher } from 'svelte';
     const dispatch = createEventDispatcher();
 
-    let secret_key = "";
+    let secret_key;
     let authenticated = false;
     let generated_sk = "";
 
     // save secret key to browser store
     async function save_secret() {
-        if (secret_key.length != 44) {
-            console.error('Private key is not 32 bytes long.');
-            dispatch('error', { message: 'Private key is not 32 bytes long.' });
-            return;
-        }
-        if (!secret_key.match(/^[a-zA-Z0-9+/]+={0,2}$/)) {
-            console.error('Private key is not base64 encoded.');
-            dispatch('error', { message: 'Private key is not base64 encoded.' });
-            return;
-        }
-
-        localStorage.setItem("private_key", secret_key);
+        save_privkey(secret_key);
         await auth();
         /*
         if (authenticated) {
@@ -59,7 +48,7 @@
     <h2>Sorry for the interruption and proceed :)</h2>
 {:else}
     <input class="nt-form" bind:value={secret_key} type="text" id="secret" />
-    <button class="nt-form" on:click={save_secret}>Import</button>
+    <button class="nt-form" on:click={() => save_secret()}>Import</button>
 {/if}
 
 <div class="nt-form">
