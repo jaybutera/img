@@ -4,7 +4,7 @@ mod utils;
 mod session_key;
 
 use actix_session::Session;
-use actix_web::{web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
+use actix_web::{cookie::Key, web, App, HttpServer, HttpResponse, Result, HttpRequest, post, get};
 use actix_cors::Cors;
 use types::{
     crypto::PublicKey,
@@ -18,6 +18,7 @@ use types::{
         OwnedTopicId,
     },
 };
+use actix_session::{SessionMiddleware, storage::CookieSessionStore};
 use ed25519_dalek::{SigningKey, Signature, Verifier, VerifyingKey};
 use anyhow::anyhow;
 use std::path::PathBuf;
@@ -359,7 +360,7 @@ async fn main() -> std::io::Result<()> {
         thumbnail_sender,
     };
 
-    let session_key = session_key::load_or_create_key();
+    let session_key = Key::from(&session_key::load_or_create_key());
 
     use actix_web::web::Data;
     HttpServer::new(move || {
@@ -379,8 +380,8 @@ async fn main() -> std::io::Result<()> {
             .service(generate_challenge)
             .service(authenticate)
             .wrap(actix_web::middleware::Logger::default())
-            // TODO use a better session key and secure it
-            .wrap(actix_session::CookieSession::signed(&session_key).secure(false))
+            //.wrap(actix_session::CookieSession::signed(&session_key).secure(false))
+            .wrap(SessionMiddleware::new(CookieSessionStore::default(), session_key.clone()))
     })
     .bind(format!("localhost:{}", port))?
     .run()
