@@ -360,7 +360,7 @@ async fn main() -> std::io::Result<()> {
         thumbnail_sender,
     };
 
-    let session_key = Key::from(&session_key::load_or_create_key());
+    let session_key = session_key::load_or_create_key();
 
     use actix_web::web::Data;
     HttpServer::new(move || {
@@ -380,7 +380,6 @@ async fn main() -> std::io::Result<()> {
             .service(generate_challenge)
             .service(authenticate)
             .wrap(actix_web::middleware::Logger::default())
-            //.wrap(actix_session::CookieSession::signed(&session_key).secure(false))
             .wrap(SessionMiddleware::new(CookieSessionStore::default(), session_key.clone()))
     })
     .bind(format!("localhost:{}", port))?
