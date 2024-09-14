@@ -380,7 +380,11 @@ async fn main() -> std::io::Result<()> {
             .service(generate_challenge)
             .service(authenticate)
             .wrap(actix_web::middleware::Logger::default())
-            .wrap(SessionMiddleware::new(CookieSessionStore::default(), session_key.clone()))
+            .wrap(SessionMiddleware::builder(CookieSessionStore::default(), session_key.clone())
+                // todo secure is false for testing locally
+                .cookie_secure(false)
+                .cookie_same_site(actix_web::cookie::SameSite::None)
+                .build())
     })
     .bind(format!("localhost:{}", port))?
     .run()

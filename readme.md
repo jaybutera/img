@@ -34,3 +34,8 @@ Adding and removing photos can easily be done in command line as img provides st
 
 ## Future Features
 Eventually it would be nice to have a @user tag option in the url. Collections under a user tag can be permissioned as configured by the user. A user can decide who can see a collection and who can add to it. However img is designed to be small and do one thing well. A feature like this would take some consideration.
+
+
+## Dev Notes
+
+- Session security is false and samesite none to test locally. Should be turned off for prod.

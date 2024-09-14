@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::path::PathBuf;
 use smol::stream::StreamExt;
+use blake3::Hasher;
+use rand::Rng;
 use crate::types::{
     crypto::PublicKey,
     topic::{
@@ -354,10 +356,6 @@ impl AsyncBufRead for PayloadReader {
     }
 }
 */
-
-use blake3::{Hasher, OutputReader};
-//use hex_literal::hex;
-use rand::Rng;
 
 fn rand_string() -> String {
     let mut rng = rand::thread_rng();

@@ -37,6 +37,7 @@
         <div class="flex-left">
             <a href="https://github.com/jaybutera/img">About</a>
             <a href="/new-topic">New Collection</a>
+            <a href="/import-key">Auth</a>
         <slot />
         </div>
         <div class="flex-right">
