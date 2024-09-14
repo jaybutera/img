@@ -79,6 +79,12 @@ async fn save_file(
     dest_dir: &PathBuf,
     source_file: &PathBuf,
 ) -> Result<()> {
+    if source_file.extension().unwrap() != "jpg" {
+        println!("Skipping {:?}", source_file);
+        return Ok(());
+    }
+
+
     let mut hasher = Hasher::new();
 
     // First give it a random temp name
@@ -134,8 +140,7 @@ fn main() {
             for entry in std::fs::read_dir(source).unwrap() {
                 let entry = entry.unwrap();
                 let path = entry.path();
-                //let file_name = path.file_name().unwrap().to_str().unwrap();
-                //let dest_path = PathBuf::from(dest).join(file_name);
+                println!("Processing {:?}", path);
                 save_file(&dest_dir, &path).await.unwrap();
             }
             return;
