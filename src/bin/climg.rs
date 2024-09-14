@@ -8,78 +8,12 @@ use blake3::Hasher;
 use color_eyre::Result;
 use rand::Rng;
 
-fn rand_string() -> String {
-    let mut rng = rand::thread_rng();
-    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                             abcdefghijklmnopqrstuvwxyz\
-                             0123456789";
-    // 34 to guanrantee no conflicts with other files
-    const PASSWORD_LEN: usize = 34;
-    let password: String = (0..PASSWORD_LEN)
-        .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
-            CHARSET[idx] as char
-        })
-        .collect();
-    
-    password
-}
-
-/*
-pub async fn save_file(
-    root_dir: &PathBuf,
-    //mut payload: actix_web::web::Payload,
-    mut payload: actix_multipart::Field,
-    ext: String,
-    thumbnail_sender: smol::channel::Sender<PathBuf>,
-) -> Result<String, ServerErr> {
-    let mut hasher = Hasher::new();
-    // First give it a random temp name
-    let rand_name = format!("{}.tmp", rand_string());
-    let file = File::create(&rand_name).await?;
-    log::info!("Saving file to {}", rand_name);
-
-    // TODO limit chunk size
-    let mut buf_writer = BufWriter::new(file);
-    while let Some(chunk) = payload.next().await {
-        let chunk = chunk
-            .map_err(|e| anyhow::anyhow!("Error reading payload: {}", e))?;
-        hasher.update(&chunk);
-        buf_writer.write_all(&chunk).await?;
-    }
-
-    log::info!("Flushing file {}", rand_name);
-    buf_writer.flush().await?;
-
-    let mut hash_output = [0; 32];
-    hasher.finalize_xof().fill(&mut hash_output);
-
-    let uid = hex::encode(hash_output);
-
-    // Check if file already exists
-    let image_fname = format!("{}.{}", uid, ext);
-    let image_path = root_dir.join(&image_fname);
-    if image_path.exists() {
-        return Ok(image_fname);
-        //return Err(ServerErr::CustomError(anyhow!("File already exists".to_string())));
-    }
-
-    // Rename file
-    smol::fs::rename(&rand_name, &image_path).await?;
-
-    // Save thumbnail
-    thumbnail_sender.send(image_path.clone()).await
-        .map_err(|e| ServerErr::CustomError(anyhow!("Error sending thumbnail on channel: {}", e)))?;
-
-    Ok(image_fname)
-}
-*/
-
 async fn save_file(
     dest_dir: &PathBuf,
     source_file: &PathBuf,
 ) -> Result<()> {
-    if source_file.extension().unwrap() != "jpg" {
+    let ext = source_file.extension().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap();
+    if ext != "jpg" {
         println!("Skipping {:?}", source_file);
         return Ok(());
     }
